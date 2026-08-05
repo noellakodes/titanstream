@@ -1,0 +1,2243 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserState {
+  NEW
+  AUTHENTICATED
+  ONBOARDING_STARTED
+  EDUCATION_REQUIRED
+  CONSENT_REQUIRED
+  READY
+  ONBOARDING_WELCOME
+  ONBOARDING_EDUCATION
+  EDUCATION_COMPLETE
+  CONSENT_PENDING
+  READY_FOR_PLATFORM
+  ELIGIBLE_USER
+  ACTIVE_USER
+  DORMANT_USER
+  ONBOARDING_STALLED
+  CONSENT_EXPIRED
+  FROZEN
+  SUSPENDED_USER
+  BANNED_USER
+  DELETED_USER
+}
+
+enum EducationModuleId {
+  welcome
+  platform
+  funds
+  actions
+  risks
+  withdrawal
+  myths
+  quiz
+  crypto_basics
+}
+
+enum EducationStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum ConsentType {
+  risk_acknowledgement
+  terms_of_service
+  privacy_policy
+  data_processing
+  marketing_opt_in
+  kyc_consent
+  not_a_bank
+  rewards_not_guaranteed
+  may_lose_value
+  withdrawal_terms
+  restricted_jurisdiction
+}
+
+enum AuditEventType {
+  USER_AUTHENTICATED
+  USER_CREATED
+  USER_UPDATED
+  ONBOARDING_STARTED
+  ONBOARDING_STEP_COMPLETED
+  ONBOARDING_RESUMED
+  ONBOARDING_STALLED
+  ONBOARDING_COMPLETED
+  EDUCATION_MODULE_STARTED
+  EDUCATION_MODULE_COMPLETED
+  EDUCATION_QUIZ_ANSWERED
+  EDUCATION_QUIZ_COMPLETED
+  EDUCATION_ALL_COMPLETED
+  CONSENT_RECORDED
+  CONSENT_ACCEPTED
+  CONSENT_EXPIRED
+  CONSENT_ALL_COMPLETED
+  READINESS_SCORED
+  USER_READY
+  USER_NOT_READY
+  USER_STATE_CHANGED
+  ACCOUNT_FROZEN
+  ACCOUNT_SUSPENDED
+  ACCOUNT_BANNED
+  ACCOUNT_DELETED
+  ADMIN_ACTION
+  SECURITY_EVENT
+  FINANCIAL_ACCOUNT_CREATED
+  LEDGER_ENTRY_CREATED
+  TRANSACTION_CREATED
+  TRANSACTION_COMPLETED
+  TRANSACTION_FAILED
+  BALANCE_UPDATED
+}
+
+enum FinancialAccountStatus {
+  ACTIVE
+  RESTRICTED
+  SUSPENDED
+  CLOSED
+}
+
+enum LedgerAccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+  SYSTEM
+}
+
+enum LedgerEntryType {
+  DEBIT
+  CREDIT
+}
+
+enum TransactionStatus {
+  CREATED
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REVERSED
+}
+
+enum TransactionType {
+  INTERNAL_ADJUSTMENT
+  SYSTEM_ALLOCATION
+  REVERSAL
+  WITHDRAWAL_RESERVE
+  WITHDRAWAL_SETTLE
+  WITHDRAWAL_REVERSAL
+}
+
+enum FinancialOperationType {
+  INTERNAL_ADJUSTMENT
+  SYSTEM_ALLOCATION
+  REVERSAL
+  WITHDRAWAL_RESERVE
+  WITHDRAWAL_SETTLE
+  WITHDRAWAL_REVERSAL
+}
+
+enum FinancialOperationStatus {
+  REQUESTED
+  VALIDATED
+  AUTHORIZED
+  EXECUTING
+  POSTED
+  COMPLETED
+  FAILED_VALIDATION
+  FAILED_RISK
+  FAILED_EXECUTION
+  FAILED_EXTERNAL_PROVIDER
+  CANCELLED
+}
+
+enum IdempotencyStatus {
+  STARTED
+  COMPLETED
+  FAILED
+}
+
+enum FinancialRuleType {
+  USER_READY
+  ACCOUNT_ACTIVE
+  ASSET_ENABLED
+  MIN_AMOUNT
+  DAILY_LIMIT
+}
+
+enum DomainEventType {
+  FINANCIAL_OPERATION_REQUESTED
+  FINANCIAL_OPERATION_AUTHORIZED
+  LEDGER_POSTING_STARTED
+  LEDGER_POSTING_COMPLETED
+  LEDGER_POSTING_FAILED
+  BALANCE_CHANGED
+}
+
+enum ReconciliationRunStatus {
+  CREATED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum OperatorStatus {
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+
+enum OperatorAvailability {
+  ONLINE
+  OFFLINE
+  PAUSED
+}
+
+enum SettlementType {
+  DEPOSIT
+  PAYOUT
+}
+
+enum SettlementStatus {
+  CREATED
+  INITIALIZED
+  OPERATOR_ASSIGNED
+  MERCHANT_ASSIGNED
+  WAITING_FOR_PAYMENT
+  WAITING_PAYMENT
+  VERIFYING
+  APPROVED
+  POSTED
+  PAYMENT_RECEIVED
+  USDT_SENT
+  COMPLETED
+  FAILED
+  EXPIRED
+  CANCELLED
+  REJECTED
+  DISPUTED
+  RISK_FLAGGED
+  RISK_HOLD
+}
+
+enum SettlementEventType {
+  SettlementCreated
+  SettlementInitialized
+  SettlementPaymentDetected
+  SettlementVerificationStarted
+  OperatorAssigned
+  MerchantAssigned
+  OperatorAccepted
+  PaymentReceived
+  USDTSent
+  SettlementApproved
+  SettlementCompleted
+  SettlementRejected
+  SettlementExpired
+  SettlementCancelled
+  SettlementDisputed
+  RiskFlagged
+}
+
+enum OperationsQueueStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum SettlementProviderId {
+  INTERNAL_OPERATIONS
+  MERCHANT_MOBILE_MONEY
+  CRYPTOBOT
+}
+
+enum SettlementProviderStatus {
+  ENABLED
+  DISABLED
+}
+
+enum SettlementProviderHealthStatus {
+  HEALTHY
+  DEGRADED
+  DOWN
+}
+
+model User {
+  telegramUserId   BigInt    @id @map("telegram_user_id")
+  telegramUsername String?   @map("telegram_username")
+  firstName        String    @map("first_name")
+  lastName         String?   @map("last_name")
+  photoUrl         String?   @map("photo_url")
+  languageCode     String    @default("en") @map("language_code")
+  state            UserState @default(NEW) @map("state")
+
+  loginCount   Int       @default(0) @map("login_count")
+  lastActiveAt DateTime? @map("last_active_at")
+  lastLoginAt  DateTime? @map("last_login_at")
+  lastActiveIp String?   @map("last_active_ip")
+
+  educationScore     Int     @default(0) @map("education_score")
+  readinessScore     Int     @default(0) @map("readiness_score")
+  isReady            Boolean @default(false) @map("is_ready")
+  qualifiedReferrals Int     @default(0) @map("qualified_referrals")
+  payingReferrals    Int     @default(0) @map("paying_referrals")
+
+  channelVerified   Boolean   @default(false) @map("channel_verified")
+  channelVerifiedAt DateTime? @map("channel_verified_at")
+
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+  anonymizedAt DateTime? @map("anonymized_at")
+
+  onboardingProgress        OnboardingProgress?
+  educationCompletions      EducationCompletion[]
+  userConsents              UserConsent[]
+  auditEvents               AuditEvent[]
+  readinessScores           ReadinessScore[]
+  readinessHistory          ReadinessHistory[]
+  stateTransitions          UserStateTransition[]
+  financialAccount          FinancialAccount?
+  financialOperations       FinancialOperation[]
+  settlementSessions        SettlementSession[]
+  referralCode              ReferralCode?
+  referralAsReferrer        ReferralRelationship[]         @relation("ReferrerRelation")
+  referralAsReferee         ReferralRelationship?          @relation("RefereeRelation")
+  rewards                   Reward[]
+  trustProfile              UserTrustProfile?
+  userLevel                 UserLevelRecord?
+  userBenefits              UserBenefit[]
+  notifications             NotificationRecord[]
+  notificationPreference    NotificationPreference?
+  growthEvents              GrowthEvent[]
+  qualificationHistory      ReferralQualificationHistory[]
+  paymentInvoices           PaymentInvoice[]
+  channelVerificationEvents ChannelVerificationEvent[]
+  miningState               UserMiningState?
+  productSubscriptions      ProductSubscription[]
+  identityId                String?                        @map("identity_id")
+  identity                  UniversalIdentity?             @relation(fields: [identityId], references: [id], onDelete: SetNull)
+  userPreferences           UserPreferences?
+  userMachines              UserMachine[]
+  achievements              Achievement[]
+  crystalAccount            CrystalAccount?
+  crystalTransactions       CrystalTransaction[]
+  gameSessions              GameSession[]
+  gameProfile               GameProfile?
+  gamePlayerStats           GamePlayerStat[]
+  gameRewardGrants          GameRewardGrant[]
+  gameChallengeCompletions  GameChallengeCompletion[]
+
+  @@index([state])
+  @@index([createdAt])
+  @@index([isReady])
+  @@index([state, updatedAt])
+  @@map("users")
+}
+
+model Asset {
+  assetCode String   @id @map("asset_code")
+  name      String   @map("name")
+  symbol    String   @map("symbol")
+  decimals  Int      @map("decimals")
+  enabled   Boolean  @default(true) @map("enabled")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  ledgerEntries LedgerEntry[]
+  transactions  FinancialTransaction[]
+
+  @@index([enabled])
+  @@map("assets")
+}
+
+model FinancialAccount {
+  id             String                 @id @default(uuid()) @map("financial_account_id")
+  telegramUserId BigInt                 @unique @map("telegram_user_id")
+  status         FinancialAccountStatus @default(ACTIVE) @map("status")
+  activatedAt    DateTime?              @map("activated_at")
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+
+  user          User                   @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Restrict)
+  ledgerEntries LedgerEntry[]
+  transactions  FinancialTransaction[]
+  operations    FinancialOperation[]
+
+  @@index([telegramUserId])
+  @@index([status])
+  @@map("financial_accounts")
+}
+
+model LedgerAccount {
+  id          String            @id @default(uuid()) @map("ledger_account_id")
+  code        String            @unique @map("code")
+  name        String            @map("name")
+  type        LedgerAccountType @map("type")
+  description String?           @map("description")
+  enabled     Boolean           @default(true) @map("enabled")
+  metadata    Json?             @map("metadata")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  ledgerEntries LedgerEntry[]
+
+  @@index([type])
+  @@index([enabled])
+  @@map("ledger_accounts")
+}
+
+model TransactionGroup {
+  id          String    @id @default(uuid()) @map("transaction_group_id")
+  reference   String    @unique @map("reference")
+  description String?   @map("description")
+  metadata    Json?     @map("metadata")
+  finalizedAt DateTime? @map("finalized_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  transactions  FinancialTransaction[]
+  ledgerEntries LedgerEntry[]
+
+  @@index([createdAt])
+  @@map("transaction_groups")
+}
+
+model FinancialTransaction {
+  id                 String            @id @default(uuid()) @map("transaction_id")
+  financialAccountId String            @map("financial_account_id")
+  transactionGroupId String?           @map("transaction_group_id")
+  transactionType    TransactionType   @map("transaction_type")
+  status             TransactionStatus @default(CREATED) @map("status")
+  assetCode          String            @map("asset_code")
+  amount             Decimal           @db.Decimal(36, 18)
+  reference          String            @unique @map("reference")
+  metadata           Json?             @map("metadata")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+  processingAt       DateTime?         @map("processing_at")
+  completedAt        DateTime?         @map("completed_at")
+  failedAt           DateTime?         @map("failed_at")
+  reversedAt         DateTime?         @map("reversed_at")
+
+  financialAccount FinancialAccount     @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  transactionGroup TransactionGroup?    @relation(fields: [transactionGroupId], references: [id], onDelete: Restrict)
+  asset            Asset                @relation(fields: [assetCode], references: [assetCode], onDelete: Restrict)
+  operations       FinancialOperation[]
+
+  @@index([financialAccountId])
+  @@index([transactionGroupId])
+  @@index([status])
+  @@index([assetCode])
+  @@index([createdAt])
+  @@map("transactions")
+}
+
+model FinancialOperation {
+  id                 String                   @id @default(uuid()) @map("operation_id")
+  telegramUserId     BigInt                   @map("telegram_user_id")
+  financialAccountId String                   @map("financial_account_id")
+  transactionId      String?                  @map("transaction_id")
+  operationType      FinancialOperationType   @map("operation_type")
+  status             FinancialOperationStatus @default(REQUESTED) @map("status")
+  assetCode          String                   @map("asset_code")
+  amount             Decimal                  @db.Decimal(36, 18)
+  idempotencyKey     String                   @map("idempotency_key")
+  reference          String                   @unique @map("reference")
+  requestPayload     Json                     @map("request_payload")
+  failureCode        String?                  @map("failure_code")
+  failureReason      String?                  @map("failure_reason")
+  metadata           Json?                    @map("metadata")
+  createdAt          DateTime                 @default(now()) @map("created_at")
+  updatedAt          DateTime                 @updatedAt @map("updated_at")
+  completedAt        DateTime?                @map("completed_at")
+
+  user             User                    @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Restrict)
+  financialAccount FinancialAccount        @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  transaction      FinancialTransaction?   @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  workflowSteps    FinancialWorkflowStep[]
+  domainEvents     FinancialDomainEvent[]
+
+  @@unique([telegramUserId, idempotencyKey])
+  @@index([telegramUserId])
+  @@index([financialAccountId])
+  @@index([transactionId])
+  @@index([status])
+  @@index([assetCode])
+  @@index([createdAt])
+  @@map("financial_operations")
+}
+
+model FinancialRule {
+  id            String                  @id @default(uuid()) @map("financial_rule_id")
+  code          String                  @unique @map("code")
+  ruleType      FinancialRuleType       @map("rule_type")
+  enabled       Boolean                 @default(true) @map("enabled")
+  assetCode     String?                 @map("asset_code")
+  operationType FinancialOperationType? @map("operation_type")
+  parameters    Json                    @default("{}") @map("parameters")
+  description   String?                 @map("description")
+  createdAt     DateTime                @default(now()) @map("created_at")
+  updatedAt     DateTime                @updatedAt @map("updated_at")
+
+  @@index([enabled])
+  @@index([ruleType])
+  @@index([assetCode])
+  @@map("financial_rules")
+}
+
+model FinancialIdempotencyRecord {
+  id              String            @id @default(uuid()) @map("idempotency_record_id")
+  telegramUserId  BigInt            @map("telegram_user_id")
+  idempotencyKey  String            @map("idempotency_key")
+  requestHash     String            @map("request_hash")
+  status          IdempotencyStatus @default(STARTED) @map("status")
+  operationId     String?           @map("operation_id")
+  responsePayload Json?             @map("response_payload")
+  lockedUntil     DateTime?         @map("locked_until")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  @@unique([telegramUserId, idempotencyKey])
+  @@index([operationId])
+  @@index([status])
+  @@map("financial_idempotency_records")
+}
+
+model FinancialWorkflowStep {
+  id             String                    @id @default(uuid()) @map("workflow_step_id")
+  operationId    String                    @map("operation_id")
+  previousStatus FinancialOperationStatus? @map("previous_status")
+  newStatus      FinancialOperationStatus  @map("new_status")
+  trigger        String                    @map("trigger")
+  metadata       Json?                     @map("metadata")
+  createdAt      DateTime                  @default(now()) @map("created_at")
+
+  operation FinancialOperation @relation(fields: [operationId], references: [id], onDelete: Restrict)
+
+  @@index([operationId])
+  @@index([newStatus])
+  @@index([createdAt])
+  @@map("financial_workflow_steps")
+}
+
+model FinancialDomainEvent {
+  id                 String          @id @default(uuid()) @map("domain_event_id")
+  operationId        String?         @map("operation_id")
+  telegramUserId     BigInt?         @map("telegram_user_id")
+  financialAccountId String?         @map("financial_account_id")
+  transactionId      String?         @map("transaction_id")
+  eventType          DomainEventType @map("event_type")
+  payload            Json            @default("{}") @map("payload")
+  publishedAt        DateTime?       @map("published_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+
+  operation FinancialOperation? @relation(fields: [operationId], references: [id], onDelete: Restrict)
+
+  @@index([operationId])
+  @@index([telegramUserId])
+  @@index([financialAccountId])
+  @@index([transactionId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("financial_domain_events")
+}
+
+model ReconciliationRun {
+  id            String                  @id @default(uuid()) @map("reconciliation_run_id")
+  source        String                  @map("source")
+  status        ReconciliationRunStatus @default(CREATED) @map("status")
+  startedAt     DateTime?               @map("started_at")
+  completedAt   DateTime?               @map("completed_at")
+  summary       Json?                   @map("summary")
+  failureReason String?                 @map("failure_reason")
+  createdAt     DateTime                @default(now()) @map("created_at")
+  updatedAt     DateTime                @updatedAt @map("updated_at")
+
+  checkpoints ReconciliationCheckpoint[]
+
+  @@index([source])
+  @@index([status])
+  @@index([createdAt])
+  @@map("reconciliation_runs")
+}
+
+model ReconciliationCheckpoint {
+  id          String   @id @default(uuid()) @map("reconciliation_checkpoint_id")
+  runId       String   @map("reconciliation_run_id")
+  subject     String   @map("subject")
+  externalRef String?  @map("external_ref")
+  ledgerRef   String?  @map("ledger_ref")
+  status      String   @map("status")
+  details     Json?    @map("details")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  run ReconciliationRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+
+  @@index([runId])
+  @@index([subject])
+  @@index([status])
+  @@map("reconciliation_checkpoints")
+}
+
+model Operator {
+  id                           String               @id @default(uuid()) @map("operator_id")
+  displayName                  String               @map("display_name")
+  whatsappNumber               String               @map("whatsapp_number")
+  telegramUsername             String?              @map("telegram_username")
+  country                      String               @map("country")
+  supportedCurrencies          Json                 @default("[]") @map("supported_currencies")
+  supportedMobileMoneyNetworks Json                 @default("[]") @map("supported_mobile_money_networks")
+  mobileMoneyNumber            String               @map("mobile_money_number")
+  status                       OperatorStatus       @default(ACTIVE) @map("status")
+  availability                 OperatorAvailability @default(OFFLINE) @map("availability")
+  capacity                     Int                  @default(5) @map("capacity")
+  currentLoad                  Int                  @default(0) @map("current_load")
+  trustScore                   Int                  @default(50) @map("trust_score")
+  averageCompletionTimeSeconds Int                  @default(900) @map("average_completion_time_seconds")
+  dailyLimit                   Decimal              @map("daily_limit") @db.Decimal(36, 18)
+  authTokenHash                String?              @map("auth_token_hash")
+  createdAt                    DateTime             @default(now()) @map("created_at")
+  updatedAt                    DateTime             @updatedAt @map("updated_at")
+
+  sessions          SettlementSession[]
+  operatorSessions  OperatorSession[]
+  capacitySnapshots OperatorCapacity[]
+  metrics           OperatorMetric[]
+  notes             SettlementNote[]
+
+  @@index([status, availability])
+  @@index([country])
+  @@map("operators")
+}
+
+model OperatorSession {
+  id         String    @id @default(uuid()) @map("operator_session_id")
+  operatorId String    @map("operator_id")
+  tokenHash  String    @map("token_hash")
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  operator Operator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+
+  @@index([operatorId])
+  @@index([tokenHash])
+  @@map("operator_sessions")
+}
+
+model OperatorCapacity {
+  id             String   @id @default(uuid()) @map("operator_capacity_id")
+  operatorId     String   @map("operator_id")
+  businessDate   DateTime @map("business_date")
+  acceptedCount  Int      @default(0) @map("accepted_count")
+  completedCount Int      @default(0) @map("completed_count")
+  rejectedCount  Int      @default(0) @map("rejected_count")
+  settledAmount  Decimal  @default(0) @map("settled_amount") @db.Decimal(36, 18)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  operator Operator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+
+  @@unique([operatorId, businessDate])
+  @@index([businessDate])
+  @@map("operator_capacity")
+}
+
+model SettlementSession {
+  id                    String               @id @default(uuid()) @map("settlement_id")
+  telegramUserId        BigInt               @map("telegram_user_id")
+  operatorId            String?              @map("operator_id")
+  provider              SettlementProviderId @default(INTERNAL_OPERATIONS) @map("provider")
+  sessionType           SettlementType       @default(DEPOSIT) @map("session_type")
+  asset                 String               @map("asset")
+  requestedAmount       Decimal              @map("requested_amount") @db.Decimal(36, 18)
+  expectedCryptoAmount  Decimal              @map("expected_crypto_amount") @db.Decimal(36, 18)
+  exchangeRate          Decimal              @map("exchange_rate") @db.Decimal(36, 18)
+  country               String               @map("country")
+  mobileMoneyNetwork    String               @map("mobile_money_network")
+  referenceCode         String               @unique @map("reference_code")
+  status                SettlementStatus     @default(CREATED) @map("status")
+  expiresAt             DateTime             @map("expires_at")
+  merchantAssignedAt    DateTime?            @map("merchant_assigned_at")
+  paymentReceivedAt     DateTime?            @map("payment_received_at")
+  usdtSentAt            DateTime?            @map("usdt_sent_at")
+  completedAt           DateTime?            @map("completed_at")
+  orchestratorReference String?              @map("orchestrator_reference")
+  providerMetadata      Json                 @default("{}") @map("provider_metadata")
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+
+  user     User              @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Restrict)
+  operator Operator?         @relation(fields: [operatorId], references: [id], onDelete: Restrict)
+  events   SettlementEvent[]
+  notes    SettlementNote[]
+
+  @@index([telegramUserId])
+  @@index([operatorId])
+  @@index([provider])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("settlement_sessions")
+}
+
+model SettlementEvent {
+  id           String              @id @default(uuid()) @map("settlement_event_id")
+  settlementId String              @map("settlement_id")
+  eventType    SettlementEventType @map("event_type")
+  actorType    String              @map("actor_type")
+  actorId      String?             @map("actor_id")
+  payload      Json                @default("{}") @map("payload")
+  createdAt    DateTime            @default(now()) @map("created_at")
+
+  settlement SettlementSession @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  @@index([settlementId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("settlement_events")
+}
+
+model OperatorMetric {
+  id                           String   @id @default(uuid()) @map("operator_metric_id")
+  operatorId                   String   @map("operator_id")
+  windowStart                  DateTime @map("window_start")
+  windowEnd                    DateTime @map("window_end")
+  assignedCount                Int      @default(0) @map("assigned_count")
+  acceptedCount                Int      @default(0) @map("accepted_count")
+  completedCount               Int      @default(0) @map("completed_count")
+  rejectedCount                Int      @default(0) @map("rejected_count")
+  averageCompletionTimeSeconds Int      @default(0) @map("average_completion_time_seconds")
+  createdAt                    DateTime @default(now()) @map("created_at")
+
+  operator Operator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+
+  @@index([operatorId])
+  @@index([windowStart, windowEnd])
+  @@map("operator_metrics")
+}
+
+model SettlementNote {
+  id           String   @id @default(uuid()) @map("settlement_note_id")
+  settlementId String   @map("settlement_id")
+  operatorId   String?  @map("operator_id")
+  note         String   @map("note")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  settlement SettlementSession @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  operator   Operator?         @relation(fields: [operatorId], references: [id], onDelete: SetNull)
+
+  @@index([settlementId])
+  @@index([operatorId])
+  @@map("settlement_notes")
+}
+
+model OperationsQueueItem {
+  id           String                @id @default(uuid()) @map("operations_queue_item_id")
+  settlementId String?               @map("settlement_id")
+  reason       String                @map("reason")
+  status       OperationsQueueStatus @default(OPEN) @map("status")
+  payload      Json                  @default("{}") @map("payload")
+  createdAt    DateTime              @default(now()) @map("created_at")
+  resolvedAt   DateTime?             @map("resolved_at")
+
+  @@index([settlementId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("operations_queue")
+}
+
+model SettlementProvider {
+  id                 SettlementProviderId     @id @map("provider_id")
+  displayName        String                   @map("display_name")
+  status             SettlementProviderStatus @default(ENABLED) @map("status")
+  supportedAssets    Json                     @default("[]") @map("supported_assets")
+  supportedCountries Json                     @default("[]") @map("supported_countries")
+  capabilityManifest Json                     @default("{}") @map("capability_manifest")
+  priority           Int                      @default(100) @map("priority")
+  createdAt          DateTime                 @default(now()) @map("created_at")
+  updatedAt          DateTime                 @updatedAt @map("updated_at")
+
+  config SettlementProviderConfig?
+  health SettlementProviderHealth?
+
+  @@index([status, priority])
+  @@map("settlement_providers")
+}
+
+model SettlementProviderConfig {
+  id            String               @id @default(uuid()) @map("settlement_provider_config_id")
+  providerId    SettlementProviderId @unique @map("provider_id")
+  configuration Json                 @default("{}") @map("configuration")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+
+  provider SettlementProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@map("settlement_provider_config")
+}
+
+model SettlementProviderHealth {
+  id           String                         @id @default(uuid()) @map("settlement_provider_health_id")
+  providerId   SettlementProviderId           @unique @map("provider_id")
+  healthStatus SettlementProviderHealthStatus @default(HEALTHY) @map("health_status")
+  checkedAt    DateTime                       @default(now()) @map("checked_at")
+  details      Json                           @default("{}") @map("details")
+
+  provider SettlementProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([healthStatus])
+  @@map("settlement_provider_health")
+}
+
+model ProviderEvent {
+  id           String               @id @default(uuid()) @map("provider_event_id")
+  providerId   SettlementProviderId @map("provider_id")
+  settlementId String?              @map("settlement_id")
+  eventType    SettlementEventType  @map("event_type")
+  payload      Json                 @default("{}") @map("payload")
+  createdAt    DateTime             @default(now()) @map("created_at")
+
+  @@index([providerId])
+  @@index([settlementId])
+  @@index([eventType])
+  @@map("provider_events")
+}
+
+model LedgerEntry {
+  id                 String          @id @default(uuid()) @map("ledger_entry_id")
+  transactionGroupId String          @map("transaction_group_id")
+  financialAccountId String          @map("financial_account_id")
+  ledgerAccountId    String          @map("ledger_account_id")
+  assetCode          String          @map("asset_code")
+  amount             Decimal         @db.Decimal(36, 18)
+  entryType          LedgerEntryType @map("entry_type")
+  reference          String          @map("reference")
+  metadata           Json?           @map("metadata")
+  createdAt          DateTime        @default(now()) @map("created_at")
+
+  transactionGroup TransactionGroup @relation(fields: [transactionGroupId], references: [id], onDelete: Restrict)
+  financialAccount FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  ledgerAccount    LedgerAccount    @relation(fields: [ledgerAccountId], references: [id], onDelete: Restrict)
+  asset            Asset            @relation(fields: [assetCode], references: [assetCode], onDelete: Restrict)
+
+  @@unique([transactionGroupId, reference, entryType, ledgerAccountId])
+  @@index([transactionGroupId])
+  @@index([financialAccountId])
+  @@index([ledgerAccountId])
+  @@index([assetCode])
+  @@index([createdAt])
+  @@map("ledger_entries")
+}
+
+model OnboardingProgress {
+  id              String    @id @default(uuid()) @map("id")
+  telegramUserId  BigInt    @unique @map("telegram_user_id")
+  currentStep     String    @default("welcome") @map("current_step")
+  currentModuleId String?   @map("current_module_id")
+  stepsCompleted  Json      @default("[]") @map("steps_completed")
+  isCompleted     Boolean   @default(false) @map("is_completed")
+  completedAt     DateTime? @map("completed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@map("onboarding_progress")
+}
+
+model EducationModule {
+  id               EducationModuleId @id @map("id")
+  title            String            @map("title")
+  description      String            @map("description")
+  content          Json              @map("content")
+  mandatory        Boolean           @default(true) @map("mandatory")
+  estimatedSeconds Int               @map("estimated_seconds")
+  orderIndex       Int               @map("order_index")
+  completionType   String            @default("view_all") @map("completion_type")
+  passThreshold    Int?              @map("pass_threshold")
+  version          Int               @default(1) @map("version")
+  isActive         Boolean           @default(true) @map("is_active")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  completions EducationCompletion[]
+
+  @@index([orderIndex])
+  @@index([isActive])
+  @@map("education_modules")
+}
+
+model EducationCompletion {
+  id                String            @id @default(uuid()) @map("id")
+  telegramUserId    BigInt            @map("telegram_user_id")
+  moduleId          EducationModuleId @map("module_id")
+  status            EducationStatus   @default(NOT_STARTED) @map("status")
+  currentSlideIndex Int               @default(0) @map("current_slide_index")
+  score             Int?              @map("score")
+  maxScore          Int?              @map("max_score")
+  passed            Boolean?          @map("passed")
+  answers           Json?             @map("answers")
+  attempts          Int               @default(0) @map("attempts")
+  timeSpentSeconds  Int               @default(0) @map("time_spent_seconds")
+  moduleVersion     Int               @default(1) @map("module_version")
+  startedAt         DateTime?         @map("started_at")
+  completedAt       DateTime?         @map("completed_at")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+
+  user   User            @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+  module EducationModule @relation(fields: [moduleId], references: [id])
+
+  @@unique([telegramUserId, moduleId])
+  @@index([telegramUserId])
+  @@index([moduleId])
+  @@map("education_completions")
+}
+
+model UserConsent {
+  id             String      @id @default(uuid()) @map("id")
+  telegramUserId BigInt      @map("telegram_user_id")
+  consentType    ConsentType @map("consent_type")
+  version        Int         @default(1) @map("version")
+  documentHash   String?     @map("document_hash")
+  documentUrl    String?     @map("document_url")
+  ipAddress      String?     @map("ip_address")
+  userAgent      String?     @map("user_agent")
+  sessionId      String?     @map("session_id")
+  metadata       Json?       @map("metadata")
+  isActive       Boolean     @default(true) @map("is_active")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  expiresAt      DateTime?   @map("expires_at")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@unique([telegramUserId, consentType, version])
+  @@index([telegramUserId])
+  @@index([consentType])
+  @@map("user_consents")
+}
+
+model AuditEvent {
+  id             String         @id @default(uuid()) @map("id")
+  telegramUserId BigInt?        @map("telegram_user_id")
+  eventType      AuditEventType @map("event_type")
+  description    String?        @map("description")
+  metadata       Json?          @map("metadata")
+  ipAddress      String?        @map("ip_address")
+  userAgent      String?        @map("user_agent")
+  sessionId      String?        @map("session_id")
+  correlationId  String?        @map("correlation_id")
+  severity       String         @default("INFO") @map("severity")
+  source         String?        @map("source")
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  user User? @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: SetNull)
+
+  @@index([telegramUserId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([severity, createdAt])
+  @@map("audit_events")
+}
+
+model ReadinessScore {
+  id              String   @id @default(uuid()) @map("id")
+  telegramUserId  BigInt   @unique @map("telegram_user_id")
+  overallScore    Int      @map("overall_score")
+  educationScore  Int      @map("education_score")
+  trustScore      Int      @map("trust_score")
+  engagementScore Int      @map("engagement_score")
+  riskScore       Int      @map("risk_score")
+  isReady         Boolean  @default(false) @map("is_ready")
+  reasons         Json     @default("[]") @map("reasons")
+  barriers        Json     @default("[]") @map("barriers")
+  calculatedAt    DateTime @default(now()) @map("calculated_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@index([isReady])
+  @@index([overallScore])
+  @@map("readiness_scores")
+}
+
+model ReadinessHistory {
+  id              String   @id @default(uuid()) @map("id")
+  telegramUserId  BigInt   @map("telegram_user_id")
+  overallScore    Int      @map("overall_score")
+  educationScore  Int      @map("education_score")
+  trustScore      Int      @map("trust_score")
+  engagementScore Int      @map("engagement_score")
+  riskScore       Int      @map("risk_score")
+  isReady         Boolean  @map("is_ready")
+  reasons         Json     @default("[]") @map("reasons")
+  barriers        Json     @default("[]") @map("barriers")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@index([telegramUserId])
+  @@index([createdAt])
+  @@map("readiness_history")
+}
+
+model UserStateTransition {
+  id             String    @id @default(uuid()) @map("id")
+  telegramUserId BigInt    @map("telegram_user_id")
+  fromState      UserState @map("from_state")
+  toState        UserState @map("to_state")
+  reason         String?   @map("reason")
+  triggerEvent   String?   @map("trigger_event")
+  metadata       Json?     @map("metadata")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@index([telegramUserId])
+  @@index([createdAt])
+  @@map("user_state_transitions")
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  OPERATIONS_ADMIN
+  FINANCE_ADMIN
+  RISK_OPERATOR
+  MERCHANT_MANAGER
+  SUPPORT_AGENT
+}
+
+enum MerchantStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  SUSPENDED
+  DISABLED
+}
+
+enum RiskEventStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+enum RiskSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum SupportCategory {
+  PAYMENT_ISSUE
+  SETTLEMENT_DELAY
+  MERCHANT_ISSUE
+  ACCOUNT_ISSUE
+  TECHNICAL_ISSUE
+}
+
+enum SupportPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum SupportStatus {
+  OPEN
+  ASSIGNED
+  WAITING
+  RESOLVED
+  CLOSED
+}
+
+model AdminUser {
+  id           String    @id @default(uuid()) @map("admin_user_id")
+  username     String    @unique @map("username")
+  email        String    @unique @map("email")
+  passwordHash String    @map("password_hash")
+  role         AdminRole @default(SUPPORT_AGENT) @map("role")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  sessions AdminSession[]
+
+  @@map("admin_users")
+}
+
+model AdminSession {
+  id          String    @id @default(uuid()) @map("admin_session_id")
+  adminUserId String    @map("admin_user_id")
+  tokenHash   String    @map("token_hash")
+  expiresAt   DateTime  @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
+  @@index([tokenHash])
+  @@map("admin_sessions")
+}
+
+model MerchantProfile {
+  id                           String         @id @default(uuid()) @map("merchant_id")
+  operatorId                   String?        @unique @map("operator_id")
+  displayName                  String         @map("display_name")
+  country                      String         @map("country")
+  phone                        String         @map("phone")
+  telegramIdentifier           String?        @map("telegram_identifier")
+  whatsappContact              String         @map("whatsapp_contact")
+  supportedNetworks            Json           @default("[]") @map("supported_networks")
+  supportedAssets              Json           @default("[]") @map("supported_assets")
+  dailyLimit                   Decimal        @default(5000) @map("daily_limit") @db.Decimal(36, 18)
+  status                       MerchantStatus @default(PENDING) @map("status")
+  trustScore                   Float          @default(100.0) @map("trust_score")
+  completionRate               Float          @default(100.0) @map("completion_rate")
+  averageCompletionTimeSeconds Int            @default(180) @map("average_completion_time_seconds")
+  createdAt                    DateTime       @default(now()) @map("created_at")
+  updatedAt                    DateTime       @updatedAt @map("updated_at")
+
+  metrics MerchantMetric[]
+
+  @@index([status])
+  @@index([country])
+  @@map("merchant_profiles")
+}
+
+model MerchantMetric {
+  id                    String   @id @default(uuid()) @map("metric_id")
+  merchantId            String   @map("merchant_id")
+  completedSettlements  Int      @default(0) @map("completed_settlements")
+  failedSettlements     Int      @default(0) @map("failed_settlements")
+  rejectedSettlements   Int      @default(0) @map("rejected_settlements")
+  averageCompletionTime Int      @default(0) @map("average_completion_time")
+  disputeRate           Float    @default(0.0) @map("dispute_rate")
+  dailyVolume           Decimal  @default(0) @map("daily_volume") @db.Decimal(36, 18)
+  weeklyVolume          Decimal  @default(0) @map("weekly_volume") @db.Decimal(36, 18)
+  monthlyVolume         Decimal  @default(0) @map("monthly_volume") @db.Decimal(36, 18)
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  merchant MerchantProfile @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@map("merchant_metrics")
+}
+
+model RiskEvent {
+  id                 String          @id @default(uuid()) @map("risk_id")
+  entityType         String          @map("entity_type")
+  entityId           String          @map("entity_id")
+  ruleTriggered      String          @map("rule_triggered")
+  severity           RiskSeverity    @default(MEDIUM) @map("severity")
+  status             RiskEventStatus @default(OPEN) @map("status")
+  assignedOperatorId String?         @map("assigned_operator_id")
+  notes              String?         @map("notes")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  resolvedAt         DateTime?       @map("resolved_at")
+
+  @@index([status])
+  @@index([severity])
+  @@index([entityType, entityId])
+  @@map("risk_events")
+}
+
+model SupportCase {
+  id                 String          @id @default(uuid()) @map("case_id")
+  userId             BigInt?         @map("user_id")
+  settlementId       String?         @map("settlement_id")
+  category           SupportCategory @map("category")
+  priority           SupportPriority @default(MEDIUM) @map("priority")
+  status             SupportStatus   @default(OPEN) @map("status")
+  assignedOperatorId String?         @map("assigned_operator_id")
+  notes              String?         @map("notes")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([userId])
+  @@index([settlementId])
+  @@map("support_cases")
+}
+
+model OperationalAuditLog {
+  id        String   @id @default(uuid()) @map("audit_log_id")
+  actorId   String   @map("actor_id")
+  actorRole String   @map("actor_role")
+  action    String   @map("action")
+  entity    String   @map("entity")
+  entityId  String?  @map("entity_id")
+  metadata  Json     @default("{}") @map("metadata")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([actorId])
+  @@index([action])
+  @@index([entity, entityId])
+  @@map("operational_audit_logs")
+}
+
+// ===================================================
+// STAGE 9 — TRUST, GROWTH & USER RETENTION ENGINE
+// ===================================================
+
+enum GrowthEventType {
+  USER_REGISTERED
+  USER_VERIFIED
+  USER_READY
+  USER_ONBOARDED
+  FIRST_SETTLEMENT_COMPLETED
+  SETTLEMENT_COMPLETED
+  PAYMENT_CONFIRMED
+  REFERRAL_COMPLETED
+  LEVEL_UPGRADED
+  REWARD_GRANTED
+  WITHDRAWAL_REQUESTED
+  ACCOUNT_MILESTONE_REACHED
+}
+
+enum ReferralStatus {
+  CREATED
+  INVITED
+  REGISTERED
+  ONBOARDED
+  QUALIFIED
+  PAYING
+  REWARDED
+}
+
+enum RewardType {
+  REFERRAL
+  MILESTONE
+  LOYALTY
+  CAMPAIGN
+}
+
+enum RewardStatus {
+  AVAILABLE
+  IN_PROGRESS
+  CLAIM_PENDING
+  CLAIMED
+  EXPIRED
+}
+
+enum UserLevelTier {
+  NEW
+  VERIFIED
+  TRUSTED
+  PREMIUM
+  ELITE
+}
+
+enum BenefitType {
+  TRANSACTION_LIMIT_BOOST
+  PRIORITY_PROCESSING
+  FEE_REDUCTION
+  ENHANCED_SUPPORT
+  ACCESS_PRIVILEGE
+}
+
+enum NotificationChannel {
+  TELEGRAM
+  IN_APP
+  WHATSAPP
+  PUSH
+}
+
+model GrowthEvent {
+  id             String          @id @default(uuid()) @map("id")
+  telegramUserId BigInt?         @map("telegram_user_id")
+  eventType      GrowthEventType @map("event_type")
+  payload        Json            @default("{}") @map("payload")
+  correlationId  String?         @map("correlation_id")
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  user User? @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: SetNull)
+
+  @@index([telegramUserId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("growth_events")
+}
+
+model ReferralCode {
+  id             String   @id @default(uuid()) @map("id")
+  telegramUserId BigInt   @unique @map("telegram_user_id")
+  code           String   @unique @map("code")
+  metadata       Json?    @map("metadata")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user          User                   @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+  relationships ReferralRelationship[]
+
+  @@index([code])
+  @@map("referral_codes")
+}
+
+model ReferralRelationship {
+  id             String         @id @default(uuid()) @map("id")
+  referrerId     BigInt         @map("referrer_id")
+  refereeId      BigInt         @unique @map("referee_id")
+  referralCodeId String?        @map("referral_code_id")
+  status         ReferralStatus @default(CREATED) @map("status")
+  metadata       Json?          @map("metadata")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  qualifiedAt    DateTime?      @map("qualified_at")
+  rewardedAt     DateTime?      @map("rewarded_at")
+
+  referrer     User             @relation("ReferrerRelation", fields: [referrerId], references: [telegramUserId], onDelete: Restrict)
+  referee      User             @relation("RefereeRelation", fields: [refereeId], references: [telegramUserId], onDelete: Restrict)
+  referralCode ReferralCode?    @relation(fields: [referralCodeId], references: [id], onDelete: SetNull)
+  events       ReferralEvent[]
+  rewards      ReferralReward[]
+
+  @@index([referrerId])
+  @@index([status])
+  @@map("referral_relationships")
+}
+
+model ReferralEvent {
+  id             String          @id @default(uuid()) @map("id")
+  relationshipId String          @map("relationship_id")
+  fromStatus     ReferralStatus? @map("from_status")
+  toStatus       ReferralStatus  @map("to_status")
+  payload        Json?           @map("payload")
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  relationship ReferralRelationship @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+
+  @@index([relationshipId])
+  @@map("referral_events")
+}
+
+model ReferralReward {
+  id             String   @id @default(uuid()) @map("id")
+  relationshipId String   @map("relationship_id")
+  rewardId       String   @unique @map("reward_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  relationship ReferralRelationship @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  reward       Reward               @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+
+  @@index([relationshipId])
+  @@map("referral_rewards")
+}
+
+model ReferralQualificationHistory {
+  id             String   @id @default(uuid()) @map("id")
+  telegramUserId BigInt   @map("telegram_user_id")
+  checkType      String   @map("check_type") // WITHDRAWAL_ELIGIBILITY | DISCOUNT_ELIGIBILITY
+  qualified      Boolean  @map("qualified")
+  qualifiedCount Int      @map("qualified_count")
+  payingCount    Int      @default(0) @map("paying_count")
+  requirement    Int      @map("requirement")
+  metadata       Json?    @map("metadata")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@index([telegramUserId])
+  @@index([checkType])
+  @@index([createdAt])
+  @@map("referral_qualification_history")
+}
+
+model RewardRule {
+  id         String     @id @default(uuid()) @map("id")
+  code       String     @unique @map("code")
+  name       String     @map("name")
+  rewardType RewardType @map("reward_type")
+  amount     Decimal    @db.Decimal(36, 18)
+  assetCode  String     @default("USDT") @map("asset_code")
+  enabled    Boolean    @default(true) @map("enabled")
+  parameters Json       @default("{}") @map("parameters")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  rewards Reward[]
+
+  @@index([enabled])
+  @@index([rewardType])
+  @@map("reward_rules")
+}
+
+model Reward {
+  id             String       @id @default(uuid()) @map("reward_id")
+  telegramUserId BigInt       @map("telegram_user_id")
+  ruleId         String?      @map("rule_id")
+  rewardType     RewardType   @map("reward_type")
+  amount         Decimal      @db.Decimal(36, 18)
+  assetCode      String       @default("USDT") @map("asset_code")
+  status         RewardStatus @default(AVAILABLE) @map("status")
+  reference      String       @unique @map("reference")
+  operationId    String?      @map("operation_id")
+  metadata       Json?        @map("metadata")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  processedAt    DateTime?    @map("processed_at")
+
+  user           User            @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Restrict)
+  rule           RewardRule?     @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  referralReward ReferralReward?
+
+  @@index([telegramUserId])
+  @@index([status])
+  @@index([rewardType])
+  @@map("rewards")
+}
+
+model Achievement {
+  id             String    @id @default(uuid()) @map("achievement_id")
+  telegramUserId BigInt    @map("telegram_user_id")
+  code           String    @map("code")
+  name           String    @map("name")
+  description    String    @map("description")
+  tier           String    @default("SILVER") @map("tier")
+  icon           String?   @map("icon")
+  progress       Int       @default(0) @map("progress")
+  target         Int       @default(1) @map("target")
+  achievedAt     DateTime? @map("achieved_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@unique([telegramUserId, code])
+  @@index([telegramUserId, achievedAt])
+  @@map("achievements")
+}
+
+model UserTrustProfile {
+  id                   String   @id @default(uuid()) @map("id")
+  telegramUserId       BigInt   @unique @map("telegram_user_id")
+  trustScore           Int      @default(50) @map("trust_score")
+  completedSettlements Int      @default(0) @map("completed_settlements")
+  failedSettlements    Int      @default(0) @map("failed_settlements")
+  successRate          Float    @default(100.0) @map("success_rate")
+  accountAgeDays       Int      @default(0) @map("account_age_days")
+  verificationStatus   String   @default("UNVERIFIED") @map("verification_status")
+  riskIndicators       Json     @default("[]") @map("risk_indicators")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  user        User         @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+  trustEvents TrustEvent[]
+
+  @@index([trustScore])
+  @@map("user_trust_profiles")
+}
+
+model TrustEvent {
+  id             String   @id @default(uuid()) @map("id")
+  profileId      String   @map("profile_id")
+  telegramUserId BigInt   @map("telegram_user_id")
+  scoreDelta     Int      @map("score_delta")
+  newScore       Int      @map("new_score")
+  reason         String   @map("reason")
+  metadata       Json?    @map("metadata")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  profile UserTrustProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@index([telegramUserId])
+  @@map("trust_events")
+}
+
+model UserLevelConfig {
+  id                       String        @id @default(uuid()) @map("id")
+  level                    UserLevelTier @unique @map("level")
+  name                     String        @map("name")
+  minAccountAgeDays        Int           @default(0) @map("min_account_age_days")
+  minSuccessfulSettlements Int           @default(0) @map("min_successful_settlements")
+  minTrustScore            Int           @default(0) @map("min_trust_score")
+  benefits                 Json          @default("[]") @map("benefits")
+  orderIndex               Int           @map("order_index")
+  createdAt                DateTime      @default(now()) @map("created_at")
+  updatedAt                DateTime      @updatedAt @map("updated_at")
+
+  @@index([orderIndex])
+  @@map("user_level_configs")
+}
+
+model UserLevelRecord {
+  id             String        @id @default(uuid()) @map("id")
+  telegramUserId BigInt        @unique @map("telegram_user_id")
+  currentLevel   UserLevelTier @default(NEW) @map("current_level")
+  upgradedAt     DateTime      @default(now()) @map("upgraded_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@index([currentLevel])
+  @@map("user_levels")
+}
+
+model BenefitRule {
+  id          String        @id @default(uuid()) @map("id")
+  code        String        @unique @map("code")
+  name        String        @map("name")
+  level       UserLevelTier @map("level")
+  benefitType BenefitType   @map("benefit_type")
+  parameters  Json          @default("{}") @map("parameters")
+  enabled     Boolean       @default(true) @map("enabled")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  userBenefits UserBenefit[]
+
+  @@index([level])
+  @@index([enabled])
+  @@map("benefit_rules")
+}
+
+model UserBenefit {
+  id             String    @id @default(uuid()) @map("id")
+  telegramUserId BigInt    @map("telegram_user_id")
+  benefitRuleId  String    @map("benefit_rule_id")
+  status         String    @default("ACTIVE") @map("status")
+  grantedAt      DateTime  @default(now()) @map("granted_at")
+  expiresAt      DateTime? @map("expires_at")
+
+  user User        @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+  rule BenefitRule @relation(fields: [benefitRuleId], references: [id], onDelete: Cascade)
+
+  @@index([telegramUserId])
+  @@index([status])
+  @@map("user_benefits")
+}
+
+model BenefitHistory {
+  id             String   @id @default(uuid()) @map("id")
+  telegramUserId BigInt   @map("telegram_user_id")
+  benefitCode    String   @map("benefit_code")
+  action         String   @map("action")
+  metadata       Json?    @map("metadata")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([telegramUserId])
+  @@map("benefit_history")
+}
+
+model NotificationTemplate {
+  id            String              @id @default(uuid()) @map("id")
+  code          String              @unique @map("code")
+  name          String              @map("name")
+  titleTemplate String              @map("title_template")
+  bodyTemplate  String              @map("body_template")
+  channel       NotificationChannel @default(TELEGRAM) @map("channel")
+  enabled       Boolean             @default(true) @map("enabled")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  @@index([code])
+  @@map("notification_templates")
+}
+
+model NotificationRecord {
+  id             String              @id @default(uuid()) @map("id")
+  telegramUserId BigInt              @map("telegram_user_id")
+  templateCode   String              @map("template_code")
+  message        String              @map("message")
+  channel        NotificationChannel @default(TELEGRAM) @map("channel")
+  status         String              @default("SENT") @map("status")
+  metadata       Json?               @map("metadata")
+  createdAt      DateTime            @default(now()) @map("created_at")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@index([telegramUserId])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id               String   @id @default(uuid()) @map("id")
+  telegramUserId   BigInt   @unique @map("telegram_user_id")
+  telegramEnabled  Boolean  @default(true) @map("telegram_enabled")
+  inAppEnabled     Boolean  @default(true) @map("in_app_enabled")
+  marketingEnabled Boolean  @default(false) @map("marketing_enabled")
+  eventPreferences Json     @default("{}") @map("event_preferences")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+model BotBroadcast {
+  id          String    @id @default(uuid()) @map("id")
+  title       String    @map("title")
+  message     String    @map("message")
+  target      String    @default("ALL") @map("target")
+  sentCount   Int       @default(0) @map("sent_count")
+  failedCount Int       @default(0) @map("failed_count")
+  status      String    @default("PENDING") @map("status")
+  createdById String?   @map("created_by_id")
+  metadata    Json?     @map("metadata")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("bot_broadcasts")
+}
+
+enum PaymentInvoiceStatus {
+  CREATED
+  WAITING_FOR_PAYMENT
+  PAID
+  EXPIRED
+  FAILED
+  REFUNDED
+}
+
+model PaymentInvoice {
+  id                String               @id @default(uuid()) @map("invoice_id")
+  telegramUserId    BigInt               @map("telegram_user_id")
+  provider          SettlementProviderId @default(CRYPTOBOT) @map("provider")
+  externalInvoiceId String               @unique @map("external_invoice_id")
+  asset             String               @map("asset")
+  amount            Decimal              @map("amount") @db.Decimal(36, 18)
+  currency          String               @map("currency")
+  payUrl            String               @map("pay_url")
+  status            PaymentInvoiceStatus @default(CREATED) @map("status")
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+  paidAt            DateTime?            @map("paid_at")
+  metadata          Json?                @map("metadata")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Restrict)
+
+  @@index([telegramUserId])
+  @@index([externalInvoiceId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("payment_invoices")
+}
+
+model ChannelVerificationEvent {
+  id             String   @id @default(uuid()) @map("id")
+  telegramUserId BigInt   @map("telegram_user_id")
+  channelId      String   @map("channel_id")
+  status         String   @map("status")
+  verifiedAt     DateTime @default(now()) @map("verified_at")
+  metadata       Json?    @map("metadata")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@index([telegramUserId])
+  @@index([channelId])
+  @@index([verifiedAt])
+  @@map("channel_verification_events")
+}
+
+model EmergencyControlState {
+  id                 String   @id @default("SYSTEM_EMERGENCY_STATE") @map("id")
+  depositsPaused     Boolean  @default(false) @map("deposits_paused")
+  withdrawalsPaused  Boolean  @default(false) @map("withdrawals_paused")
+  rewardsPaused      Boolean  @default(false) @map("rewards_paused")
+  channelGateEnabled Boolean  @default(true) @map("channel_gate_enabled")
+  requiredChannelId  String   @default("@tetherstream") @map("required_channel_id")
+  updatedBy          String?  @map("updated_by")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("emergency_control_states")
+}
+
+model ProductSubscription {
+  id             String    @id @default(uuid()) @map("id")
+  telegramUserId BigInt    @map("telegram_user_id")
+  productCode    String    @map("product_code")
+  status         String    @default("ACTIVE") @map("status")
+  expiresAt      DateTime? @map("expires_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  metadata       Json?     @map("metadata")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@index([telegramUserId])
+  @@index([productCode])
+  @@index([status])
+  @@map("product_subscriptions")
+}
+
+model UserMiningState {
+  telegramUserId               BigInt    @id @map("telegram_user_id")
+  activeCurrency               String    @default("USDT") @map("active_currency")
+  baseSpeedGhs                 Decimal   @default(1.0) @map("base_speed_ghs")
+  coolerMultiplier             Decimal   @default(1.0) @map("cooler_multiplier")
+  unclaimedBalance             Decimal   @default(0.0) @map("unclaimed_balance")
+  lastTappedAt                 DateTime? @map("last_tapped_at")
+  lastUpdatedAt                DateTime? @map("last_updated_at")
+  machineMode                  String    @default("PROMOTIONAL") @map("machine_mode")
+  lifetimePromotionalOutput    Decimal   @default(0.0) @map("lifetime_promotional_output")
+  interactivePromotionalOutput Decimal   @default(0.0) @map("interactive_promotional_output")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@map("user_mining_states")
+}
+
+model UserMachine {
+  id               String   @id @default(uuid()) @map("user_machine_id")
+  telegramUserId   BigInt   @map("telegram_user_id")
+  tierCode         String   @map("tier_code")
+  name             String   @map("name")
+  purchasePrice    Decimal  @map("purchase_price") @db.Decimal(36, 18)
+  currency         String   @default("USDT") @map("currency")
+  status           String   @default("ACTIVE") @map("status")
+  capacityGhs      Decimal  @map("capacity_ghs") @db.Decimal(36, 18)
+  lifetimeEarnings Decimal  @default(0.0) @map("lifetime_earnings") @db.Decimal(36, 18)
+  purchasedAt      DateTime @default(now()) @map("purchased_at")
+  activatedAt      DateTime @default(now()) @map("activated_at")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@index([telegramUserId])
+  @@index([status])
+  @@map("user_machines")
+}
+
+// ===================================================
+// MISSION CONTROL & AGNOSTIC IDENTITY EXTENSIONS
+// ===================================================
+
+enum IdentityProvider {
+  TELEGRAM
+  WHATSAPP
+  PHONE
+  EMAIL
+  GOOGLE
+  APPLE
+  INTERNAL
+}
+
+enum AuthMethod {
+  TELEGRAM
+  WHATSAPP
+}
+
+enum ShareChannel {
+  TELEGRAM
+  WHATSAPP
+  SYSTEM
+}
+
+model UniversalIdentity {
+  id          String   @id @default(uuid()) @map("identity_id")
+  displayName String   @map("display_name")
+  avatarUrl   String?  @map("avatar_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  channels     ChannelIdentity[]
+  adminNotes   AdminNote[]
+  supportCases SupportTicket[]
+  users        User[]
+
+  @@map("universal_identities")
+}
+
+model ChannelIdentity {
+  id         String           @id @default(uuid()) @map("channel_identity_id")
+  identityId String           @map("identity_id")
+  provider   IdentityProvider @map("provider")
+  identifier String           @map("identifier")
+  phone      String?          @map("phone")
+  telegramId String?          @map("telegram_id")
+  verified   Boolean          @default(true) @map("verified")
+  metadata   Json             @default("{}") @map("metadata")
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  identity UniversalIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, identifier])
+  @@index([identityId])
+  @@map("channel_identities")
+}
+
+model UserPreferences {
+  id                    String              @id @default(uuid()) @map("preference_id")
+  telegramUserId        BigInt              @unique @map("telegram_user_id")
+  authenticationMethod  AuthMethod          @default(TELEGRAM) @map("authentication_method")
+  notificationChannel   NotificationChannel @default(TELEGRAM) @map("notification_channel")
+  preferredShareChannel ShareChannel        @default(TELEGRAM) @map("preferred_share_channel")
+  pushToken             String?             @map("push_token")
+  settings              Json?               @default("{}") @map("settings")
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model OtpChallenge {
+  id        String   @id @default(uuid()) @map("challenge_id")
+  phone     String   @map("phone")
+  otpHash   String   @map("otp_hash")
+  attempts  Int      @default(0) @map("attempts")
+  verified  Boolean  @default(false) @map("verified")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([phone])
+  @@index([verified])
+  @@map("otp_challenges")
+}
+
+model ReferralAnalytics {
+  id          String   @id @default(uuid()) @map("analytics_id")
+  inviterId   BigInt   @map("inviter_id")
+  inviteeId   BigInt?  @map("invitee_id")
+  channel     String   @default("DIRECT") @map("channel")
+  campaign    String?  @map("campaign")
+  medium      String?  @map("medium")
+  device      String?  @map("device")
+  landingPage String?  @map("landing_page")
+  registered  Boolean  @default(false) @map("registered")
+  activated   Boolean  @default(false) @map("activated")
+  funded      Boolean  @default(false) @map("funded")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([inviterId])
+  @@index([channel])
+  @@map("referral_analytics")
+}
+
+model AdminDevice {
+  id          String   @id @default(uuid()) @map("admin_device_id")
+  adminUserId String   @map("admin_user_id")
+  fingerprint String   @map("fingerprint")
+  deviceModel String?  @map("device_model")
+  os          String?  @map("os")
+  browser     String?  @map("browser")
+  lastIp      String   @map("last_ip")
+  isTrusted   Boolean  @default(true) @map("is_trusted")
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([adminUserId, fingerprint])
+  @@index([adminUserId])
+  @@map("admin_devices")
+}
+
+model TelegramConfirmationToken {
+  id            String    @id @default(uuid()) @map("token_id")
+  token         String    @unique @map("token")
+  adminUserId   String    @map("admin_user_id")
+  actionType    String    @map("action_type")
+  actionPayload Json      @map("action_payload")
+  status        String    @default("PENDING") @map("status")
+  expiresAt     DateTime  @map("expires_at")
+  confirmedAt   DateTime? @map("confirmed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([token])
+  @@index([adminUserId])
+  @@index([status])
+  @@map("telegram_confirmation_tokens")
+}
+
+model AdminNote {
+  id         String   @id @default(uuid()) @map("note_id")
+  authorId   String   @map("author_id")
+  targetType String   @map("target_type")
+  targetId   String   @map("target_id")
+  content    String   @map("content")
+  metadata   Json?    @map("metadata")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  identity UniversalIdentity? @relation(fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([targetType, targetId])
+  @@index([authorId])
+  @@map("admin_notes")
+}
+
+model FeatureFlag {
+  id          String   @id @default(uuid()) @map("flag_id")
+  code        String   @unique @map("code")
+  name        String   @map("name")
+  description String?  @map("description")
+  enabled     Boolean  @default(true) @map("enabled")
+  rules       Json     @default("{}") @map("rules")
+  updatedBy   String?  @map("updated_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([code])
+  @@index([enabled])
+  @@map("feature_flags")
+}
+
+model SystemAchievement {
+  id           String   @id @default(uuid()) @map("achievement_id")
+  code         String   @unique @map("code")
+  title        String   @map("title")
+  description  String   @map("description")
+  category     String   @default("MILESTONE") @map("category")
+  icon         String   @default("🏆") @map("icon")
+  rewardAmount Decimal  @default(0.0) @map("reward_amount") @db.Decimal(36, 18)
+  rewardAsset  String   @default("USDT") @map("reward_asset")
+  orderIndex   Int      @default(0) @map("order_index")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  userAchievements UserAchievement[]
+
+  @@index([code])
+  @@map("system_achievements")
+}
+
+model UserAchievement {
+  id             String    @id @default(uuid()) @map("id")
+  telegramUserId BigInt    @map("telegram_user_id")
+  achievementId  String    @map("achievement_id")
+  unlockedAt     DateTime  @default(now()) @map("unlocked_at")
+  sharedAt       DateTime? @map("shared_at")
+
+  achievement SystemAchievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([telegramUserId, achievementId])
+  @@index([telegramUserId])
+  @@map("user_achievements")
+}
+
+model SupportTicket {
+  id            String           @id @default(uuid()) @map("ticket_id")
+  identityId    String?          @map("identity_id")
+  channel       IdentityProvider @default(TELEGRAM) @map("channel")
+  channelUserId String           @map("channel_user_id")
+  subject       String           @map("subject")
+  status        String           @default("OPEN") @map("status")
+  priority      String           @default("MEDIUM") @map("priority")
+  assignedAdmin String?          @map("assigned_admin")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  identity UniversalIdentity? @relation(fields: [identityId], references: [id], onDelete: SetNull)
+  messages SupportMessage[]
+
+  @@index([status])
+  @@index([channelUserId])
+  @@map("support_tickets")
+}
+
+model SupportMessage {
+  id          String   @id @default(uuid()) @map("message_id")
+  ticketId    String   @map("ticket_id")
+  senderType  String   @map("sender_type")
+  senderId    String   @map("sender_id")
+  content     String   @map("content")
+  attachments Json     @default("[]") @map("attachments")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("support_messages")
+}
+
+// ============================================================
+// GAME ECONOMY — closed-loop crystal economy + game sessions
+// ============================================================
+
+enum CrystalTransactionType {
+  DAILY_LOGIN
+  GAME_ENTRY
+  GAME_REWARD
+  MACHINE_BONUS
+  ACHIEVEMENT
+  EVENT_BONUS
+  MYSTERY_CHEST
+  BOOST
+  COSMETIC
+  TOURNAMENT
+  RETRY
+  PURCHASE
+  ADMIN_ADJUSTMENT
+  REVERSAL
+}
+
+enum GameSessionStatus {
+  STARTED
+  COMPLETED
+  REJECTED
+  VOID
+  EXPIRED
+}
+
+enum GameDifficulty {
+  EASY
+  MEDIUM
+  HARD
+  EXPERT
+}
+
+enum GameChallengeObjective {
+  SCORE_AT_LEAST
+  FEWER_MOVES
+  WINS
+  PLAYS
+  PERFECT_ACCURACY
+  PERFECT_SESSION
+}
+
+enum GameRewardGrantType {
+  XP
+  EVENT_POINTS
+  MYSTERY_BOX
+  MACHINE_BOOST
+  ACHIEVEMENT_PROGRESS
+  BOOST_TOKEN
+}
+
+/// First-class crystal balance. Crystals are the gameplay currency and are
+/// intentionally kept separate from financial (USDT/TON) balances.
+model CrystalAccount {
+  id             String   @id @default(uuid()) @map("account_id")
+  telegramUserId BigInt   @unique @map("telegram_user_id")
+  balance        Int      @default(0) @map("balance")
+  lifetimeEarned Int      @default(0) @map("lifetime_earned")
+  lifetimeSpent  Int      @default(0) @map("lifetime_spent")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user         User                 @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+  transactions CrystalTransaction[]
+
+  @@map("crystal_accounts")
+}
+
+/// Signed, append-only crystal ledger. `balanceAfter` snapshots the account
+/// balance after each movement so the ledger is independently auditable.
+model CrystalTransaction {
+  id             String                @id @default(uuid()) @map("tx_id")
+  telegramUserId BigInt                @map("telegram_user_id")
+  accountId      String                @map("account_id")
+  type           CrystalTransactionType @map("tx_type")
+  amount         Int                   @map("amount")
+  balanceAfter   Int                   @map("balance_after")
+  reference      String                @unique @map("reference")
+  metadata       Json?                 @map("metadata")
+  createdAt      DateTime              @default(now()) @map("created_at")
+
+  account CrystalAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user    User           @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@index([telegramUserId, createdAt])
+  @@index([type])
+  @@map("crystal_transactions")
+}
+
+/// Configurable game catalog. Reward tables are server-side JSON config so
+/// administrators can tune costs, limits and payouts without deploys.
+model GameCatalog {
+  id                   String         @id @default(uuid()) @map("id")
+  gameId               String         @unique @map("game_id")
+  code                 String         @map("code")
+  name                 String         @map("name")
+  description          String         @map("description")
+  category             String         @map("category")
+  icon                 String         @default("🎮") @map("icon")
+  accentColor          String         @default("#00e676") @map("accent_color")
+  crystalCost          Int            @default(5) @map("crystal_cost")
+  dailyLimit           Int            @default(10) @map("daily_limit")
+  estimatedDurationSec Int            @default(60) @map("estimated_duration_sec")
+  difficulty           GameDifficulty @default(MEDIUM) @map("difficulty")
+  enabled              Boolean        @default(true) @map("enabled")
+  rewardConfig         Json           @default("{}") @map("reward_config")
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  sessions GameSession[]
+  events   GameEvent[]
+  playerStats     GamePlayerStat[]
+  dailyChallenges GameDailyChallenge[]
+
+  @@map("game_catalog")
+}
+
+/// Server-authoritative game session. The client never decides payouts;
+/// every session is validated and rewarded by the backend.
+model GameSession {
+  id                String            @id @default(uuid()) @map("session_id")
+  telegramUserId    BigInt            @map("telegram_user_id")
+  gameId            String            @map("game_id")
+  status            GameSessionStatus @default(STARTED) @map("status")
+  crystalCost       Int               @map("crystal_cost")
+  serverStartedAt   DateTime          @default(now()) @map("server_started_at")
+  serverEndedAt     DateTime?         @map("server_ended_at")
+  durationMs        Int?              @map("duration_ms")
+  score             Int               @default(0) @map("score")
+  crystalsEarned    Int               @default(0) @map("crystals_earned")
+  usdtEarned        Decimal?          @db.Decimal(36, 18) @map("usdt_earned")
+  validation        Json?             @map("validation")
+  reference         String            @unique @map("reference")
+  createdAt         DateTime          @default(now()) @map("created_at")
+
+  user User         @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+  game GameCatalog  @relation(fields: [gameId], references: [gameId], onDelete: Restrict)
+
+  @@index([telegramUserId, createdAt])
+  @@index([gameId, createdAt])
+  @@index([telegramUserId, gameId, createdAt])
+  @@index([createdAt])
+  @@map("game_sessions")
+}
+
+/// Per-user game progression. Best scores, streaks and totals feed the
+/// leaderboard and progression UI.
+model GameProfile {
+  telegramUserId     BigInt    @id @map("telegram_user_id")
+  highestScore       Int       @default(0) @map("highest_score")
+  gamesPlayed        Int       @default(0) @map("games_played")
+  gamesWon           Int       @default(0) @map("games_won")
+  winStreak          Int       @default(0) @map("win_streak")
+  bestWinStreak      Int       @default(0) @map("best_win_streak")
+  dailyStreak        Int       @default(0) @map("daily_streak")
+  totalCrystalsEarned Int      @default(0) @map("total_crystals_earned")
+  totalCrystalsSpent Int       @default(0) @map("total_crystals_spent")
+  xpTotal            Int       @default(0) @map("xp_total")
+  xpLevel            Int       @default(1) @map("xp_level")
+  challengesCompleted Int      @default(0) @map("challenges_completed")
+  lastPlayedAt       DateTime? @map("last_played_at")
+  lastDailyClaimAt   DateTime? @map("last_daily_claim_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@map("game_profiles")
+}
+
+/// Per-user, per-game progression statistics. Powers personal bests, game
+/// achievements and the Game Hub's "Personal Best" display.
+model GamePlayerStat {
+  id             String   @id @default(uuid()) @map("stat_id")
+  telegramUserId BigInt   @map("telegram_user_id")
+  gameId         String   @map("game_id")
+  gamesPlayed    Int      @default(0) @map("games_played")
+  gamesWon       Int      @default(0) @map("games_won")
+  highestScore   Int      @default(0) @map("highest_score")
+  bestCombo      Int      @default(0) @map("best_combo")
+  bestAccuracy   Int      @default(0) @map("best_accuracy")
+  bestReactionMs Int      @default(0) @map("best_reaction_ms")
+  bestMoves      Int      @default(0) @map("best_moves")
+  bestTimeMs     Int      @default(0) @map("best_time_ms")
+  bestEfficiency Int      @default(0) @map("best_efficiency")
+  levelsCompleted Int     @default(0) @map("levels_completed")
+  perfectSessions Int     @default(0) @map("perfect_sessions")
+  xpEarned       Int      @default(0) @map("xp_earned")
+  lastPlayedAt   DateTime @default(now()) @map("last_played_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user User        @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+  game GameCatalog @relation(fields: [gameId], references: [gameId], onDelete: Restrict)
+
+  @@unique([telegramUserId, gameId])
+  @@index([gameId, highestScore])
+  @@map("game_player_stats")
+}
+
+/// Non-currency reward grants issued by the Rewards Engine (XP, event points,
+/// mystery boxes, machine boost tokens, achievement progress, boost tokens).
+/// Append-only with unique references so grants are idempotent.
+model GameRewardGrant {
+  id             String               @id @default(uuid()) @map("grant_id")
+  telegramUserId BigInt               @map("telegram_user_id")
+  gameId         String               @map("game_id")
+  sessionId      String?              @map("session_id")
+  type           GameRewardGrantType  @map("type")
+  amount         Int                  @default(0) @map("amount")
+  reference      String               @unique @map("reference")
+  metadata       Json?                @map("metadata")
+  createdAt      DateTime             @default(now()) @map("created_at")
+
+  user User @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+
+  @@index([telegramUserId, createdAt])
+  @@index([type])
+  @@map("game_reward_grants")
+}
+
+/// Rotating daily challenge definitions. Admin configures a pool; each day the
+/// engine activates the next due challenge so objectives rotate automatically.
+model GameDailyChallenge {
+  id            String                 @id @default(uuid()) @map("challenge_id")
+  code          String                 @unique @map("code")
+  gameId        String                 @map("game_id")
+  title         String                 @map("title")
+  description   String                 @map("description")
+  objectiveType GameChallengeObjective @map("objective_type")
+  target        Int                    @map("target")
+  rewardCrystals Int                   @default(20) @map("reward_crystals")
+  rewardXp      Int                    @default(25) @map("reward_xp")
+  enabled       Boolean                @default(true) @map("enabled")
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
+
+  game GameCatalog @relation(fields: [gameId], references: [gameId], onDelete: Restrict)
+
+  completions GameChallengeCompletion[]
+
+  @@index([enabled])
+  @@map("game_daily_challenges")
+}
+
+/// Which user completed which daily challenge on which day (idempotent).
+model GameChallengeCompletion {
+  id             String   @id @default(uuid()) @map("completion_id")
+  telegramUserId BigInt   @map("telegram_user_id")
+  challengeId    String   @map("challenge_id")
+  challengeDay   DateTime @map("challenge_day")
+  sessionId      String   @map("session_id")
+  rewardCrystals Int      @default(0) @map("reward_crystals")
+  rewardXp       Int      @default(0) @map("reward_xp")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user      User              @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+  challenge GameDailyChallenge @relation(fields: [challengeId], references: [id], onDelete: Restrict)
+
+  @@unique([telegramUserId, challengeId, challengeDay])
+  @@map("game_challenge_completions")
+}
+
+/// Seasonal / weekend events. Active events apply configurable multipliers to
+/// crystal and USDT payouts for specific games (or all games when null).
+model GameEvent {
+  id               String    @id @default(uuid()) @map("event_id")
+  code             String    @unique @map("code")
+  title            String    @map("title")
+  description      String    @map("description")
+  gameId           String?   @map("game_id")
+  crystalMultiplier Int      @default(1) @map("crystal_multiplier")
+  usdtMultiplier   Decimal   @default(1) @db.Decimal(36, 18) @map("usdt_multiplier")
+  startsAt         DateTime  @map("starts_at")
+  endsAt           DateTime  @map("ends_at")
+  enabled          Boolean   @default(true) @map("enabled")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  game GameCatalog? @relation(fields: [gameId], references: [gameId], onDelete: SetNull)
+
+  @@index([enabled, startsAt, endsAt])
+  @@map("game_events")
+}

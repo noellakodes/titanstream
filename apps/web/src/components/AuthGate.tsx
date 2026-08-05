@@ -1,0 +1,406 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Loader2, AlertCircle, RefreshCw, ShieldCheck, Send } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { api } from '../services/api';
+import { useAuthStore, type SessionData } from '../store/useAuthStore';
+import { useTelegram } from '../context/TelegramContext';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const AUTH_TIMEOUT_MS = 12_000;
+const BOT_USERNAME = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string) || 'titanstream_bot';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function buildSession(data: any, platform: 'telegram' | 'web'): SessionData {
+  return {
+    accessToken: data.accessToken,
+    refreshToken: data.refreshToken,
+    user: data.user,
+    onboarding: data.onboarding,
+    isNewUser: data.isNewUser,
+    expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+    platform,
+  };
+}
+
+// ─── AuthGate ─────────────────────────────────────────────────────────────────
+
+/**
+ * AuthGate — single component that owns the complete authentication lifecycle.
+ *
+ * Platform routing:
+ *   Mini App  →  POST /auth/telegram (initData HMAC)
+ *   Web       →  Telegram Login Widget → POST /auth/telegram-login
+ *
+ * The gate renders:
+ *   - Nothing (transparent) when authentication succeeds — the parent renders the app
+ *   - A loading screen while authentication is in progress
+ *   - A clear error screen with retry when authentication fails
+ *   - The Telegram Login Widget when running in a browser
+ */
+export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isReady, isMiniApp, webApp } = useTelegram();
+
+  // Fix 4: Individual selectors prevent unnecessary re-renders from unrelated store changes
+  const hasHydrated = useAuthStore((s) => s._hasHydrated);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isAuthLoading = useAuthStore((s) => s.isAuthLoading);
+  const authError = useAuthStore((s) => s.authError);
+  const session = useAuthStore((s) => s.session);
+  const setSession = useAuthStore((s) => s.setSession);
+  const setAuthLoading = useAuthStore((s) => s.setAuthLoading);
+  const setAuthError = useAuthStore((s) => s.setAuthError);
+  const clearSession = useAuthStore((s) => s.clearSession);
+
+  const authAttempted = useRef(false);
+  const widgetMounted = useRef(false);
+  const widgetContainerRef = useRef<HTMLDivElement>(null);
+
+  // ── Handle Telegram Login Widget callback (web only) ──────────────────────
+  const handleWebWidgetLogin = useCallback(async (widgetPayload: any) => {
+    const traceId = `web_${Date.now().toString(36)}`;
+    console.info(`[AUTH_GATE:${traceId}] web.widget_callback received id=${widgetPayload?.id}`);
+    setAuthLoading(true);
+    setAuthError(null);
+
+    const timeoutId = setTimeout(() => {
+      setAuthLoading(false);
+      setAuthError('Request timed out. Please try again.');
+    }, AUTH_TIMEOUT_MS);
+
+    try {
+      const res = await api.post('/auth/telegram-login', widgetPayload);
+      const body = res.data;
+      clearTimeout(timeoutId);
+
+      if (!body.success || !body.data) throw new Error(body.error?.message || 'Auth failed');
+      console.info(`[AUTH_GATE:${traceId}] web.auth.success userId=${body.data.user.telegramUserId}`);
+      setSession(buildSession(body.data, 'web'));
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      const msg = err.response?.data?.error?.message || err.message || 'Telegram login failed';
+      console.error(`[AUTH_GATE:${traceId}] web.auth.failed reason=${msg}`);
+      setAuthLoading(false);
+      setAuthError(msg);
+    }
+  }, [setSession, setAuthLoading, setAuthError]);
+
+  // ── Mini App: auto-authenticate via initData ───────────────────────────────
+  const authenticateMiniApp = useCallback(async () => {
+    const currentAuthState = useAuthStore.getState();
+    if (currentAuthState.isAuthenticated && !currentAuthState.isSessionExpired()) {
+      console.info('[AUTH_GATE] mini_app.auth_skipped reason=already_authenticated');
+      return;
+    }
+
+    const tg = (window as any).Telegram?.WebApp;
+    const initData = tg?.initData;
+    const traceId = `tgapp_${Date.now().toString(36)}`;
+
+    console.info(`[AUTH_GATE:${traceId}] mini_app.auth_start initData.present=${!!initData} initData.length=${initData?.length ?? 0}`);
+
+    if (!initData) {
+      const msg = 'Telegram identity data unavailable. Please reopen via @titanstream_bot.';
+      console.error(`[AUTH_GATE:${traceId}] mini_app.auth_failed reason=no_init_data`);
+      setAuthError(msg);
+      setAuthLoading(false);
+      return;
+    }
+
+    setAuthLoading(true);
+    setAuthError(null);
+
+    const timeoutId = setTimeout(() => {
+      console.error(`[AUTH_GATE:${traceId}] mini_app.auth_failed reason=timeout_${AUTH_TIMEOUT_MS}ms`);
+      setAuthLoading(false);
+      setAuthError(`Could not reach TitanStream servers. Please check your connection and try again.`);
+    }, AUTH_TIMEOUT_MS);
+
+    try {
+      const res = await api.post('/auth/telegram', { initData });
+      const body = res.data;
+      clearTimeout(timeoutId);
+
+      if (!body.success || !body.data) throw new Error(body.error?.message || 'Unexpected server response');
+      console.info(`[AUTH_GATE:${traceId}] mini_app.auth.success userId=${body.data.user.telegramUserId} isNew=${body.data.isNewUser}`);
+      setSession(buildSession(body.data, 'telegram'));
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      const msg = err.response?.data?.error?.message || err.message || 'Authentication failed';
+      console.error(`[AUTH_GATE:${traceId}] mini_app.auth.failed reason=${msg}`);
+      setAuthLoading(false);
+      setAuthError(msg);
+    }
+  }, [setSession, setAuthLoading, setAuthError]);
+
+  // ── Mount Web Login Widget ─────────────────────────────────────────────────
+  const mountWidget = useCallback(() => {
+    if (widgetMounted.current || !widgetContainerRef.current) return;
+    widgetMounted.current = true;
+
+    // Register the global callback before injecting the script
+    (window as any).onTelegramAuth = (user: any) => handleWebWidgetLogin(user);
+
+    const container = widgetContainerRef.current;
+    container.innerHTML = '';
+
+    const script = document.createElement('script');
+    script.src = 'https://telegram.org/js/telegram-widget.js?22';
+    script.async = true;
+    script.setAttribute('data-telegram-login', BOT_USERNAME);
+    script.setAttribute('data-size', 'large');
+    script.setAttribute('data-radius', '14');
+    script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+    script.setAttribute('data-request-access', 'write');
+    script.onerror = () => {
+      console.error('[AUTH_GATE] telegram_widget.script_load_failed');
+    };
+    container.appendChild(script);
+    console.info(`[AUTH_GATE] web.widget.mounted botUsername=${BOT_USERNAME}`);
+  }, [handleWebWidgetLogin]);
+
+  const [webDeepLink, setWebDeepLink] = useState<string | null>(null);
+  const [webSessionCode, setWebSessionCode] = useState<string | null>(null);
+  const [isWaitingForTelegramAuth, setIsWaitingForTelegramAuth] = useState(false);
+
+  // ── Create Web Auth Session on Web mount ─────────────────────────────────
+  useEffect(() => {
+    if (!isReady || isMiniApp || isAuthenticated) return;
+
+    let isMounted = true;
+    const initWebSession = async () => {
+      try {
+        const res = await api.post('/auth/web-session/create');
+        if (isMounted && res.data?.success && res.data?.data) {
+          setWebDeepLink(res.data.data.deepLink);
+          setWebSessionCode(res.data.data.sessionCode);
+        }
+      } catch (err) {
+        console.error('[AUTH_GATE] web_session_create_failed', err);
+      }
+    };
+
+    initWebSession();
+    return () => { isMounted = false; };
+  }, [isReady, isMiniApp, isAuthenticated]);
+
+  // ── Poll Web Auth Session status ──────────────────────────────────────────
+  useEffect(() => {
+    if (!webSessionCode || isAuthenticated || isMiniApp) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.post('/auth/web-session/poll', { sessionCode: webSessionCode });
+        const body = res.data;
+        if (body?.success && body?.data?.status === 'AUTHENTICATED') {
+          console.info(`[AUTH_GATE] web_deep_link.auth_success userId=${body.data.user.telegramUserId}`);
+          clearInterval(interval);
+          setSession(buildSession(body.data, 'web'));
+        }
+      } catch (err) {
+        // Silently retry polling
+      }
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [webSessionCode, isAuthenticated, isMiniApp, setSession]);
+
+  // ── Main auth orchestration effect ────────────────────────────────────────
+  useEffect(() => {
+    if (!isReady) return; // Wait for Telegram SDK to initialize
+
+    // If the user is already authenticated, do nothing.
+    // Token refresh is handled transparently by the API interceptor in api.ts.
+    const authState = useAuthStore.getState();
+    if (authState.isAuthenticated && authState.session?.accessToken) {
+      console.info(`[AUTH_GATE] session.active userId=${authState.session.user.telegramUserId}`);
+      return;
+    }
+
+    if (authAttempted.current) return;
+    authAttempted.current = true;
+
+    if (isMiniApp) {
+      authenticateMiniApp();
+    }
+  }, [isReady, isMiniApp, authenticateMiniApp]);
+
+  // Mount widget for web context after render
+  useEffect(() => {
+    if (!isReady || isMiniApp || isAuthenticated) return;
+    mountWidget();
+  }, [isReady, isMiniApp, isAuthenticated, mountWidget]);
+
+  // ── Retry handler ──────────────────────────────────────────────────────────
+  const handleRetry = () => {
+    authAttempted.current = false;
+    widgetMounted.current = false;
+    setAuthError(null);
+    if (isMiniApp) {
+      authenticateMiniApp();
+      authAttempted.current = true;
+    }
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  RENDER DECISION TREE
+  //
+  //  Order matters. Each condition is mutually exclusive with those above it.
+  //  The "Connecting…" screen ONLY appears during genuine initial bootstrap.
+  //  Once isAuthenticated is true, children are ALWAYS rendered — the API
+  //  interceptor handles token refresh transparently in the background.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // 1. Waiting for Zustand hydration or Telegram SDK — genuine initial bootstrap
+  if (!hasHydrated || !isReady) {
+    return (
+      <div className="fixed inset-0 z-50 bg-[#06070b] flex flex-col items-center justify-center select-none">
+        <Loader2 size={28} className="text-usdt-green animate-spin mb-4" />
+        <p className="text-text-secondary text-sm">Connecting…</p>
+      </div>
+    );
+  }
+
+  // 2. Authenticated — render the app. Period.
+  //    No isSessionExpired() check here. Token refresh is handled by api.ts interceptor.
+  //    If the refresh fails (401), the interceptor calls clearSession() → isAuthenticated
+  //    becomes false → next render will show login/error screen.
+  if (isAuthenticated) {
+    return <>{children}</>;
+  }
+
+  // 3. Loading — auth in progress
+  if (isAuthLoading) {
+    return (
+      <div className="fixed inset-0 z-50 bg-[#06070b] flex flex-col items-center justify-center select-none">
+        <Loader2 size={32} className="text-usdt-green animate-spin mb-4" />
+        <p className="text-text-secondary text-sm font-medium">
+          {isMiniApp ? 'Signing you in…' : 'Signing you in…'}
+        </p>
+        <p className="text-text-tertiary text-xs mt-2 opacity-60">Powered by Telegram</p>
+      </div>
+    );
+  }
+
+  // 4. Error
+  if (authError) {
+    return (
+      <div className="fixed inset-0 z-50 bg-[#06070b] flex flex-col items-center justify-center select-none px-8">
+        <div className="flex items-center gap-3 text-red-400 mb-4">
+          <AlertCircle size={22} />
+          <p className="text-sm font-semibold">Please Sign In Again</p>
+        </div>
+        <p className="text-text-tertiary text-xs text-center max-w-xs mb-8 leading-relaxed">{authError}</p>
+        <button
+          onClick={handleRetry}
+          className="flex items-center gap-2 py-[14px] px-8 rounded-2xl bg-[#2AABEE] text-white font-extrabold text-[14px] hover:brightness-110 transition-all active:scale-[0.97]"
+        >
+          <RefreshCw size={15} />
+          Try Again
+        </button>
+        {!isMiniApp && (
+          <button
+            onClick={() => { widgetMounted.current = false; setAuthError(null); setTimeout(mountWidget, 100); }}
+            className="mt-4 text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+          >
+            Back to Telegram Login
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // 5. Web — not authenticated, show Telegram login screen
+  if (!isMiniApp) {
+    return (
+      <div className="fixed inset-0 z-50 bg-[#06070b] flex flex-col items-center select-none overflow-hidden">
+        {/* Ambient glow */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <motion.div
+            animate={{ scale: [1, 1.15, 1], opacity: [0.06, 0.11, 0.06] }}
+            transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+            className="absolute top-[30%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-usdt-green/10 rounded-full blur-[120px]"
+          />
+        </div>
+
+        <div className="flex-[1.2]" />
+
+        {/* Logo + brand */}
+        <motion.div
+          initial={{ opacity: 0, y: 28 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-10 flex flex-col items-center text-center px-8 max-w-sm"
+        >
+          <div className="relative mb-8">
+            <div className="absolute inset-0 rounded-[28px] bg-usdt-green/20 blur-2xl scale-150" />
+            <div className="relative w-[88px] h-[88px] rounded-[28px] bg-gradient-to-br from-usdt-green via-emerald-500 to-cyan-500 flex items-center justify-center shadow-2xl shadow-usdt-green/20 border border-white/20">
+              <span className="text-[40px] font-black text-white drop-shadow-md">₮</span>
+            </div>
+          </div>
+          <h1 className="text-[34px] font-black text-text-primary tracking-tight font-sans leading-none">TitanStream</h1>
+          <p className="text-[15px] text-text-secondary mt-3 font-semibold font-sans leading-snug">
+            Earn Daily Money<br />Automatically
+          </p>
+        </motion.div>
+
+        <div className="flex-1" />
+
+        {/* Telegram Deep Link Login */}
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.35, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-10 w-full max-w-sm px-8 pb-10 flex flex-col items-center gap-4"
+        >
+          {/* Primary Deep Link Button — Opens Telegram App to authorize web session */}
+          <button
+            onClick={() => {
+              const botUsername = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string) || 'titanstream_bot';
+              const targetUrl = webDeepLink || `https://t.me/${botUsername}`;
+              window.open(targetUrl, '_blank');
+              setIsWaitingForTelegramAuth(true);
+            }}
+            className="w-full py-4 px-6 rounded-2xl bg-[#2AABEE] hover:bg-[#229ED9] text-white font-extrabold text-base flex items-center justify-center gap-3 shadow-lg shadow-[#2AABEE]/25 transition-all active:scale-[0.98]"
+          >
+            <Send size={18} className="fill-current" />
+            <span>Sign in with Telegram</span>
+          </button>
+
+          {isWaitingForTelegramAuth && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2 p-3 rounded-xl bg-[#2AABEE]/10 border border-[#2AABEE]/30 text-[#2AABEE] text-xs font-semibold w-full text-center justify-center"
+            >
+              <Loader2 size={14} className="animate-spin" />
+              <span>Waiting for Telegram sign in...</span>
+            </motion.div>
+          )}
+
+          <div className="flex items-center justify-center gap-2 text-[10px] text-text-tertiary font-medium mt-1">
+            <ShieldCheck size={12} className="text-usdt-green/50" />
+            <span>Safe & Secure • No passwords needed</span>
+          </div>
+        </motion.div>
+
+        <div className="flex-1 max-h-[40px]" />
+      </div>
+    );
+  }
+
+  // 6. Mini App — not authenticated, no loading, no error.
+  //    This only happens on first launch before auth starts. Auto-trigger auth.
+  if (!authAttempted.current) {
+    authAttempted.current = true;
+    authenticateMiniApp();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-[#06070b] flex flex-col items-center justify-center select-none">
+      <Loader2 size={28} className="text-usdt-green animate-spin mb-4" />
+      <p className="text-text-secondary text-sm">Verifying your identity…</p>
+    </div>
+  );
+};

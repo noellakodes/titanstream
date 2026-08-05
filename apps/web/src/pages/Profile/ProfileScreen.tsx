@@ -1,0 +1,817 @@
+import type React from 'react';
+import { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  ShieldCheck,
+  Award,
+  User,
+  Settings,
+  HelpCircle,
+  LogOut,
+  ChevronRight,
+  Cpu,
+  CheckCircle,
+  Sparkles,
+  BookOpen,
+  Lock,
+  Globe,
+  Bell,
+  Activity,
+  FileCheck,
+  Download,
+  Trash2,
+  Sliders,
+  Palette,
+  Smartphone,
+  Key,
+  Check,
+  X
+} from 'lucide-react';
+import { useGrowthStore } from '../../store/useGrowthStore';
+import { useTreasuryStore } from '../../store/useTreasuryStore';
+import { useAuthStore } from '../../store/useAuthStore';
+import { useMachineOwnershipStore } from '../../store/useMachineOwnershipStore';
+import { useNavigationStore } from '../../store/useNavigationStore';
+import { useTelegram } from '../../context/TelegramContext';
+import { useSettingsStore } from '../../store/useSettingsStore';
+import { FlipPassportCard } from '../../components/FlipPassportCard';
+import { DestinationLoader } from '../../components/DestinationLoader';
+import { showToast } from '../../components/Toast';
+import { MachineOwnersManualModal } from '../TitanHub/components/MachineOwnersManualModal';
+import { MachineCertificateModal } from '../TitanHub/components/MachineCertificateModal';
+
+interface ProfileScreenProps {
+  isDrawer?: boolean;
+  onClose?: () => void;
+}
+
+export const ProfileScreen: React.FC<ProfileScreenProps> = ({ isDrawer = false, onClose }) => {
+  const { profile, isLoading, fetchGrowthProfile } = useGrowthStore();
+  const { trustScore } = useTreasuryStore();
+  const { session, clearSession, user: authUser } = useAuthStore();
+  const { ownerships, openCertificate, openOwnersManual } = useMachineOwnershipStore();
+  const { setActiveTab } = useNavigationStore();
+  const { hapticFeedback, user } = useTelegram();
+  const settings = useSettingsStore();
+
+  const [activeTab, setActiveTabState] = useState<'passport' | 'certificates' | 'settings'>('passport');
+  
+  // Settings Tab Inner States
+  const [displayNameInput, setDisplayNameInput] = useState(settings.displayName || user?.first_name || authUser?.firstName || '');
+  const [whatsappInput, setWhatsappInput] = useState(settings.connectedWhatsApp);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
+
+  useEffect(() => {
+    fetchGrowthProfile();
+  }, [fetchGrowthProfile]);
+
+  useEffect(() => {
+    // Keep setting display name locally in sync with store
+    if (settings.displayName) {
+      setDisplayNameInput(settings.displayName);
+    }
+  }, [settings.displayName]);
+
+  if (isLoading && !profile) {
+    return <DestinationLoader destination="profile" />;
+  }
+
+  const handleLogout = () => {
+    hapticFeedback.impactOccurred('medium');
+    clearSession();
+    localStorage.removeItem('auth_token');
+    showToast('Logged out successfully', 'success');
+    window.location.reload();
+  };
+
+  const username = settings.displayName || user?.first_name || authUser?.firstName || 'User';
+  const telegramUserId = session?.user?.telegramUserId || authUser?.telegramUserId || user?.id || 0;
+  const handle = user?.username ? `@${user.username}` : `User ID #${telegramUserId}`;
+  const totalOwnedMachines = Object.keys(ownerships).length;
+
+  const createdAt = session?.user?.createdAt || authUser?.createdAt || new Date().toISOString();
+  const commissionDate = new Date(createdAt).toISOString().split('T')[0];
+  const serialNumber = `SN-PASS-${telegramUserId.toString().slice(-6)}`;
+
+  // Save changes to display name and whatsapp
+  const handleSaveAccountProfile = () => {
+    settings.updateSetting('displayName', displayNameInput.trim());
+    settings.updateSetting('connectedWhatsApp', whatsappInput.trim());
+    hapticFeedback.notificationOccurred('success');
+    showToast('Profile saved!', 'success');
+  };
+
+  const handleExportData = () => {
+    const userData = {
+      username: username,
+      telegramId: telegramUserId,
+      settings: {
+        language: settings.language,
+        preferLocalCurrency: settings.preferLocalCurrency,
+        timeZone: settings.timeZone,
+        dateFormat: settings.dateFormat,
+        notifyChannel: settings.notifyChannel,
+        accentColor: settings.accentColor,
+        telemetryMode: settings.telemetryMode,
+      },
+      fleet: Object.values(ownerships).map(o => ({
+        machineId: o.machineId,
+        tierCode: o.tierCode,
+        nickname: o.nickname,
+        serialNumber: o.serialNumber,
+        status: o.status,
+      })),
+      timestamp: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(userData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `titan-operator-${telegramUserId}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Profile data exported successfully!', 'success');
+  };
+
+  const handleDeleteAccount = () => {
+    if (deleteConfirmationText !== 'DELETE MY ACCOUNT') {
+      showToast('Please type the exact phrase to confirm.', 'error');
+      return;
+    }
+    hapticFeedback.notificationOccurred('error');
+    clearSession();
+    localStorage.clear();
+    showToast('Account deleted.', 'success');
+    window.location.reload();
+  };
+
+  return (
+    <div className="p-4 flex flex-col gap-5 select-none relative pb-28 bg-[#090b10] min-h-full">
+      {/* DESTINATION HEADER — Identity, Prestige & Legacy */}
+      <div className="flex items-center justify-between">
+        <div>
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-gold font-mono">
+            Your Profile
+          </span>
+          <h1 className="text-2xl font-black text-text-primary tracking-tight">My Profile</h1>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {isDrawer && (
+            <button
+              onClick={onClose}
+              className="w-9 h-9 rounded-full bg-white/10 border border-white/15 flex items-center justify-center text-text-primary hover:bg-white/20 press-feedback"
+              title="Close Profile"
+            >
+              <X size={18} />
+            </button>
+          )}
+          {!isDrawer && (
+            <div className="w-10 h-10 rounded-2xl bg-gold/15 border border-gold/30 text-gold flex items-center justify-center font-bold">
+              <User size={22} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* HERO SECTION — 3D FLIP TITAN PASSPORT CARD (Profile WOW Moment) */}
+      <FlipPassportCard
+        username={username}
+        handle={handle}
+        trustScore={trustScore}
+        totalMachines={totalOwnedMachines}
+        level={profile?.level || 'VERIFIED'}
+        serialNumber={serialNumber}
+        commissionDate={commissionDate}
+      />
+
+      {/* CROSS-PAGE CONTINUITY BANNER (No Dead Ends) */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        onClick={() => setActiveTab('hub')}
+        className="p-3.5 rounded-2xl bg-gold/10 border border-gold/30 flex items-center justify-between cursor-pointer hover:border-gold/50 transition-colors press-feedback"
+      >
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-gold/20 text-gold flex items-center justify-center shrink-0">
+            <Activity size={16} />
+          </div>
+          <div>
+            <div className="text-xs font-black text-text-primary">
+              Fleet Runtime Milestone Reached
+            </div>
+            <div className="text-[10px] text-text-secondary">
+              Your machines have been running for over 100 hours! Tap to see your dashboard.
+            </div>
+          </div>
+        </div>
+        <ChevronRight size={16} className="text-gold" />
+      </motion.div>
+
+      {/* TAB NAVIGATION: Passport vs Certificates vs Settings */}
+      <div className="grid grid-cols-3 gap-1.5 p-1 bg-control-bg rounded-2xl border border-white/10 text-xs font-bold">
+        {[
+          { key: 'passport', label: 'Passport', icon: FileCheck },
+          { key: 'certificates', label: 'Certificates', icon: Award },
+          { key: 'settings', label: 'Settings', icon: Settings },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => {
+                hapticFeedback.selectionChanged();
+                setActiveTabState(tab.key as any);
+              }}
+              className={`press-feedback py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+                isActive
+                  ? 'bg-gold text-app-bg font-extrabold shadow-md'
+                  : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              <Icon size={14} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* TAB 1: TITAN PASSPORT & FLEET ARCHIVE */}
+      {activeTab === 'passport' && (
+        <div className="space-y-3">
+          <h2 className="text-xs font-extrabold uppercase tracking-wider text-text-tertiary flex items-center gap-2">
+            <Cpu size={14} className="text-gold" />
+            Your Machines
+          </h2>
+
+          <div className="web3-card rounded-2xl divide-y divide-white/5 border border-white/10 overflow-hidden text-xs">
+            {Object.values(ownerships).map((rec) => (
+              <div key={rec.machineId} className="p-3.5 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-gold/15 border border-gold/30 text-gold flex items-center justify-center">
+                    <Award size={18} />
+                  </div>
+                  <div>
+                    <div className="font-extrabold text-text-primary">{rec.nickname}</div>
+                    <div className="text-[10px] text-text-tertiary font-mono">{rec.serialNumber}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openOwnersManual(rec.tierCode)}
+                    className="py-1 px-2 rounded-lg bg-white/5 border border-white/10 text-[10px] font-bold text-text-secondary hover:text-text-primary"
+                  >
+                    Manual
+                  </button>
+                  <button
+                    onClick={() => openCertificate(rec.machineId)}
+                    className="py-1 px-2 rounded-lg bg-gold/15 border border-gold/30 text-[10px] font-bold text-gold hover:bg-gold/25"
+                  >
+                    Certificate
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: OWNERSHIP CERTIFICATES VAULT */}
+      {activeTab === 'certificates' && (
+        <div className="space-y-3">
+          <h2 className="text-xs font-extrabold uppercase tracking-wider text-text-tertiary flex items-center gap-2">
+            <Award size={14} className="text-gold" />
+            Machine Certificates
+          </h2>
+
+          <div className="grid grid-cols-1 gap-2.5">
+            {Object.values(ownerships).map((rec) => (
+              <div
+                key={rec.certificateId}
+                onClick={() => openCertificate(rec.machineId)}
+                className="web3-card-gold rounded-2xl p-4 border border-gold/30 flex items-center justify-between cursor-pointer hover:border-gold/60 transition-colors press-feedback"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gold/20 text-gold flex items-center justify-center">
+                    <Award size={22} />
+                  </div>
+                  <div>
+                    <div className="text-xs font-black text-text-primary">{rec.nickname} Certificate</div>
+                    <div className="text-[10px] font-mono text-gold">{rec.certificateId}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 text-[10px] font-extrabold text-gold uppercase bg-gold/10 px-2.5 py-1 rounded-full border border-gold/20">
+                  <span>View</span>
+                  <ChevronRight size={12} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: APP SETTINGS & SECURITY */}
+      {activeTab === 'settings' && (
+        <div className="space-y-4">
+          <h2 className="text-xs font-extrabold uppercase tracking-wider text-text-tertiary flex items-center gap-2">
+            <Settings size={14} className="text-text-tertiary" />
+            App Settings
+          </h2>
+
+          {/* Group 1: Account Preferences */}
+          <div className="web3-card rounded-2xl p-4 border border-white/10 space-y-3">
+            <h3 className="text-xs font-black uppercase text-gold font-mono flex items-center gap-1.5 border-b border-white/5 pb-2">
+              <User size={13} /> Account Details
+            </h3>
+            
+            <div className="space-y-2 text-xs">
+              <div className="flex flex-col gap-1.5">
+                <span className="font-extrabold text-text-secondary">Display Name</span>
+                <input
+                  type="text"
+                  value={displayNameInput}
+                  onChange={(e) => setDisplayNameInput(e.target.value)}
+                  placeholder="Enter your name..."
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-text-primary focus:outline-none focus:border-gold transition-colors font-mono"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="font-extrabold text-text-secondary">Connected WhatsApp (Option)</span>
+                <input
+                  type="text"
+                  value={whatsappInput}
+                  onChange={(e) => setWhatsappInput(e.target.value)}
+                  placeholder="+256..."
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-text-primary focus:outline-none focus:border-gold transition-colors font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="flex flex-col gap-1">
+                  <span className="font-extrabold text-text-secondary">Language</span>
+                  <select
+                    value={settings.language}
+                    onChange={(e) => settings.updateSetting('language', e.target.value)}
+                    className="bg-black/40 border border-white/10 rounded-xl px-2 py-1.5 text-text-primary font-mono focus:outline-none"
+                  >
+                    <option value="en">English</option>
+                    <option value="es">Español</option>
+                    <option value="sw">Swahili</option>
+                    <option value="lg">Luganda</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="font-extrabold text-text-secondary">Time Zone</span>
+                  <select
+                    value={settings.timeZone}
+                    onChange={(e) => settings.updateSetting('timeZone', e.target.value)}
+                    className="bg-black/40 border border-white/10 rounded-xl px-2 py-1.5 text-text-primary font-mono focus:outline-none"
+                  >
+                    <option value="UTC">UTC</option>
+                    <option value="EST">EST</option>
+                    <option value="EAT">EAT (East Africa)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <span className="font-extrabold text-text-secondary">Date Format</span>
+                <select
+                  value={settings.dateFormat}
+                  onChange={(e) => settings.updateSetting('dateFormat', e.target.value as any)}
+                  className="bg-black/40 border border-white/10 rounded-xl px-2.5 py-1 text-text-primary font-mono focus:outline-none"
+                >
+                  <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                  <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <span className="font-extrabold text-text-secondary">Local Currency Display</span>
+                <button
+                  onClick={() => settings.updateSetting('preferLocalCurrency', !settings.preferLocalCurrency)}
+                  className={`px-3 py-1 rounded-lg font-mono font-bold transition-colors ${
+                    settings.preferLocalCurrency ? 'bg-usdt-green/20 text-usdt-green border border-usdt-green/30' : 'bg-white/5 border border-white/10 text-text-secondary'
+                  }`}
+                >
+                  {settings.preferLocalCurrency ? 'Prefer UGX/Local' : 'Prefer USDT'}
+                </button>
+              </div>
+
+              <button
+                onClick={handleSaveAccountProfile}
+                className="w-full py-2 bg-gold text-app-bg font-extrabold rounded-xl mt-3 shadow-md press-feedback"
+              >
+                Save Details
+              </button>
+            </div>
+          </div>
+
+          {/* Group 2: Notifications Preferences */}
+          <div className="web3-card rounded-2xl p-4 border border-white/10 space-y-3">
+            <h3 className="text-xs font-black uppercase text-gold font-mono flex items-center gap-1.5 border-b border-white/5 pb-2">
+              <Bell size={13} /> Alerts & Notifications
+            </h3>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">When money is added</span>
+                <input
+                  type="checkbox"
+                  checked={settings.notifyDeposits}
+                  onChange={(e) => settings.updateSetting('notifyDeposits', e.target.checked)}
+                  className="accent-gold w-4 h-4"
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">When money is taken out</span>
+                <input
+                  type="checkbox"
+                  checked={settings.notifyWithdrawals}
+                  onChange={(e) => settings.updateSetting('notifyWithdrawals', e.target.checked)}
+                  className="accent-gold w-4 h-4"
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">When earnings are ready</span>
+                <input
+                  type="checkbox"
+                  checked={settings.notifyRewardReady}
+                  onChange={(e) => settings.updateSetting('notifyRewardReady', e.target.checked)}
+                  className="accent-gold w-4 h-4"
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">When a friend joins</span>
+                <input
+                  type="checkbox"
+                  checked={settings.notifyReferralJoined}
+                  onChange={(e) => settings.updateSetting('notifyReferralJoined', e.target.checked)}
+                  className="accent-gold w-4 h-4"
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">Machine Offline alerts</span>
+                <input
+                  type="checkbox"
+                  checked={settings.notifyMachineStopped}
+                  onChange={(e) => settings.updateSetting('notifyMachineStopped', e.target.checked)}
+                  className="accent-gold w-4 h-4"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5 pt-2 border-t border-white/5">
+                <span className="font-extrabold text-text-secondary">Send alerts via</span>
+                <div className="grid grid-cols-3 gap-1 bg-black/40 p-1 rounded-xl border border-white/5">
+                  {(['push', 'telegram', 'whatsapp'] as const).map((ch) => (
+                    <button
+                      key={ch}
+                      onClick={() => settings.updateSetting('notifyChannel', ch)}
+                      className={`py-1.5 rounded-lg text-[10px] font-black uppercase font-mono transition-all ${
+                        settings.notifyChannel === ch ? 'bg-gold text-app-bg' : 'text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      {ch}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Group 3: Privacy Control */}
+          <div className="web3-card rounded-2xl p-4 border border-white/10 space-y-3">
+            <h3 className="text-xs font-black uppercase text-gold font-mono flex items-center gap-1.5 border-b border-white/5 pb-2">
+              <ShieldCheck size={13} /> Privacy & Visibility
+            </h3>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">Show my profile to friends I invited</span>
+                <input
+                  type="checkbox"
+                  checked={settings.showProfileToReferrals}
+                  onChange={(e) => settings.updateSetting('showProfileToReferrals', e.target.checked)}
+                  className="accent-gold w-4 h-4"
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">Show me on leaderboards</span>
+                <input
+                  type="checkbox"
+                  checked={settings.showLeaderboard}
+                  onChange={(e) => settings.updateSetting('showLeaderboard', e.target.checked)}
+                  className="accent-gold w-4 h-4"
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">Hide my earnings from others</span>
+                <input
+                  type="checkbox"
+                  checked={settings.hideEarnings}
+                  onChange={(e) => settings.updateSetting('hideEarnings', e.target.checked)}
+                  className="accent-gold w-4 h-4"
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">Share my stats with friends</span>
+                <input
+                  type="checkbox"
+                  checked={settings.shareReferralStats}
+                  onChange={(e) => settings.updateSetting('shareReferralStats', e.target.checked)}
+                  className="accent-gold w-4 h-4"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Group 4: Machine Preferences */}
+          <div className="web3-card rounded-2xl p-4 border border-white/10 space-y-3">
+            <h3 className="text-xs font-black uppercase text-gold font-mono flex items-center gap-1.5 border-b border-white/5 pb-2">
+              <Sliders size={13} /> Machine Settings
+            </h3>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">Open dashboard when app starts</span>
+                <input
+                  type="checkbox"
+                  checked={settings.autoOpenHub}
+                  onChange={(e) => settings.updateSetting('autoOpenHub', e.target.checked)}
+                  className="accent-gold w-4 h-4"
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">Haptic Feedback</span>
+                <input
+                  type="checkbox"
+                  checked={settings.hapticFeedback}
+                  onChange={(e) => settings.updateSetting('hapticFeedback', e.target.checked)}
+                  className="accent-gold w-4 h-4"
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">Display style</span>
+                <select
+                  value={settings.telemetryMode}
+                  onChange={(e) => settings.updateSetting('telemetryMode', e.target.value as any)}
+                  className="bg-black/40 border border-white/10 rounded-xl px-2 py-1 text-text-primary font-mono focus:outline-none"
+                >
+                  <option value="standard">Standard</option>
+                  <option value="compact">Compact</option>
+                  <option value="advanced">Advanced</option>
+                </select>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">Reduced animations</span>
+                <input
+                  type="checkbox"
+                  checked={settings.reducedAnimations}
+                  onChange={(e) => settings.updateSetting('reducedAnimations', e.target.checked)}
+                  className="accent-gold w-4 h-4"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Group 5: Appearance settings */}
+          <div className="web3-card rounded-2xl p-4 border border-white/10 space-y-3">
+            <h3 className="text-xs font-black uppercase text-gold font-mono flex items-center gap-1.5 border-b border-white/5 pb-2">
+              <Palette size={13} /> Look & Feel
+            </h3>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="flex items-center justify-between pb-1 border-b border-white/5">
+                <span className="text-text-secondary font-extrabold">App Theme</span>
+                <select
+                  value={settings.theme || 'dark'}
+                  onChange={(e) => settings.updateSetting('theme', e.target.value as any)}
+                  className="bg-black/40 border border-white/10 rounded-xl px-2.5 py-1 text-text-primary font-mono focus:outline-none"
+                >
+                  <option value="dark">Dark Theme</option>
+                  <option value="light">Light Theme</option>
+                  <option value="system">System Default</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-text-secondary">Accent Color</span>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { key: 'green', color: 'bg-usdt-green border-usdt-green/40' },
+                    { key: 'cyan', color: 'bg-cyan-500 border-cyan-500/40' },
+                    { key: 'gold', color: 'bg-gold border-gold/40' },
+                    { key: 'purple', color: 'bg-purple-500 border-purple-500/40' }
+                  ].map((item) => (
+                    <button
+                      key={item.key}
+                      onClick={() => settings.updateSetting('accentColor', item.key as any)}
+                      className={`h-8 rounded-xl border flex items-center justify-center relative transition-all press-feedback ${item.color} ${
+                        settings.accentColor === item.key ? 'scale-105 ring-2 ring-white/30' : 'opacity-60 hover:opacity-100'
+                      }`}
+                    >
+                      {settings.accentColor === item.key && (
+                        <Check size={14} className="text-app-bg font-black" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-text-secondary">Compact view</span>
+                <input
+                  type="checkbox"
+                  checked={settings.compactMode}
+                  onChange={(e) => settings.updateSetting('compactMode', e.target.checked)}
+                  className="accent-gold w-4 h-4"
+                />
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">Large text sizing</span>
+                <input
+                  type="checkbox"
+                  checked={settings.largeText}
+                  onChange={(e) => settings.updateSetting('largeText', e.target.checked)}
+                  className="accent-gold w-4 h-4"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5 pt-2 border-t border-white/5">
+                <span className="text-text-secondary font-extrabold">Graphics Quality</span>
+                <div className="grid grid-cols-3 gap-1 bg-black/40 p-1 rounded-xl border border-white/5">
+                  {(['low', 'medium', 'high'] as const).map((q) => (
+                    <button
+                      key={q}
+                      onClick={() => settings.updateSetting('graphicsQuality', q)}
+                      className={`py-1.5 rounded-lg text-[10px] font-black uppercase font-mono transition-all ${
+                        settings.graphicsQuality === q ? 'bg-gold text-app-bg' : 'text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[9px] text-text-tertiary">
+                  Low graphics profile disables shadow glows and reduces CPU/GPU load.
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Group 6: Security, Sessions & Support */}
+          <div className="web3-card rounded-2xl p-4 border border-white/10 space-y-3">
+            <h3 className="text-xs font-black uppercase text-gold font-mono flex items-center gap-1.5 border-b border-white/5 pb-2">
+              <Key size={13} /> Security & Login
+            </h3>
+
+            <div className="space-y-3 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">Connected Telegram ID</span>
+                <span className="font-mono text-text-primary">{telegramUserId}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">Two-Factor Authentication</span>
+                <button
+                  onClick={() => {
+                    const newState = !settings.twoFactorEnabled;
+                    settings.updateSetting('twoFactorEnabled', newState);
+                    showToast(
+                      newState
+                        ? 'Two-Factor Authentication enabled for your Telegram session.'
+                        : 'Two-Factor Authentication disabled.',
+                      newState ? 'success' : 'info'
+                    );
+                  }}
+                  className={`px-2.5 py-0.5 rounded-lg font-mono font-bold text-[10px] uppercase transition-colors border press-feedback ${
+                    settings.twoFactorEnabled ? 'bg-usdt-green/20 border-usdt-green/30 text-usdt-green' : 'bg-white/5 border-white/10 text-text-secondary'
+                  }`}
+                >
+                  {settings.twoFactorEnabled ? 'Active' : 'Inactive'}
+                </button>
+              </div>
+
+              {/* Session list */}
+              <div className="p-3 bg-white/5 border border-white/10 rounded-2xl space-y-2">
+                <span className="text-[10px] font-black uppercase text-text-tertiary">Active Sessions (1)</span>
+                <div className="flex justify-between items-center text-[10px]">
+                  <div className="flex flex-col">
+                    <span className="font-bold text-text-primary flex items-center gap-1">
+                      <Smartphone size={10} className="text-usdt-green" /> This device (Active now)
+                    </span>
+                    <span className="text-text-tertiary mt-0.5 font-mono">Kampala, Uganda · 127.0.0.1</span>
+                  </div>
+                  <span className="text-usdt-green font-mono">ONLINE</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  onClick={handleExportData}
+                  className="py-2.5 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 text-text-secondary hover:text-text-primary font-extrabold flex items-center justify-center gap-1.5 transition-colors press-feedback"
+                >
+                  <Download size={14} />
+                  <span>Export Data</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    hapticFeedback.impactOccurred('medium');
+                    showToast('Revoked all other devices successfully.', 'success');
+                  }}
+                  className="py-2.5 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 text-text-secondary hover:text-text-primary font-extrabold flex items-center justify-center transition-colors press-feedback"
+                >
+                  <span>Log out other devices</span>
+                </button>
+              </div>
+
+              <div className="pt-2 border-t border-white/5">
+                <button
+                  onClick={() => setShowDeleteModal(true)}
+                  className="w-full py-2.5 bg-red-500/10 hover:bg-red-500/15 border border-red-500/30 text-red-400 font-extrabold rounded-xl flex items-center justify-center gap-1.5 transition-colors press-feedback animate-pulse"
+                >
+                  <Trash2 size={14} />
+                  <span>Delete My Account</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleLogout}
+            className="w-full py-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 font-extrabold text-xs flex items-center justify-center gap-2 hover:bg-red-500/20 transition-colors press-feedback"
+          >
+            <LogOut size={16} />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      )}
+
+      {/* Account Deletion Confirmation Modal */}
+      <AnimatePresence>
+        {showDeleteModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="web3-card max-w-[340px] w-full rounded-3xl p-5 border border-red-500/50 bg-[#090b10] flex flex-col items-center text-center space-y-4"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-400 flex items-center justify-center">
+                <Trash2 size={24} />
+              </div>
+
+              <div>
+                <h3 className="text-sm font-black text-text-primary uppercase tracking-wide">Delete Account</h3>
+                <p className="text-xs text-text-secondary leading-relaxed mt-1">
+                  This will permanently delete your account, remove your wallet balance, and remove all your machines. This cannot be undone.
+                </p>
+              </div>
+
+              <div className="w-full text-left space-y-1.5 text-xs">
+                <span className="text-text-tertiary">Type <strong className="text-red-400 font-bold font-mono select-all">DELETE MY ACCOUNT</strong> to confirm:</span>
+                <input
+                  type="text"
+                  value={deleteConfirmationText}
+                  onChange={(e) => setDeleteConfirmationText(e.target.value)}
+                  placeholder="Type phrase..."
+                  className="w-full bg-black/40 border border-red-500/30 rounded-xl px-3 py-2 text-text-primary focus:outline-none focus:border-red-500 font-mono text-center"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 w-full pt-1">
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setDeleteConfirmationText('');
+                  }}
+                  className="py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-text-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteAccount}
+                  className="py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-extrabold"
+                >
+                  Confirm Delete
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODALS */}
+      <MachineOwnersManualModal />
+      <MachineCertificateModal />
+    </div>
+  );
+};
